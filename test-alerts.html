@@ -19,10 +19,18 @@
 </style>
 </head>
 <body>
-<h1>ntfy Alert Test <span style="font-size:0.6em;opacity:0.7;font-weight:normal;">v1.2</span></h1>
+<h1>ntfy Alert Test <span style="font-size:0.6em;opacity:0.7;font-weight:normal;">v1.3</span></h1>
 <p>Sends <strong>TEST</strong> alerts to the channel saved in the Bus Follower page.</p>
 <p>Channel: <code id="topicDisplay" style="word-break:break-all;"></code></p>
 <script>document.getElementById("topicDisplay").textContent = TOPIC;</script>
+
+<h2>Connectivity Test</h2>
+<p>Tap to verify your phone can reach ntfy.sh:</p>
+<div class="row">
+  <button onclick="window.open('https://ntfy.sh/' + TOPIC + '/json?since=24h', '_blank')">Test History API</button>
+  <button onclick="window.open('https://ntfy.sh/' + TOPIC + '/sse', '_blank')">Test Live Stream</button>
+</div>
+<p style="font-size:0.85rem;opacity:0.8;">History should show JSON (or empty). Live stream will hang waiting — that's normal if it connects. If either fails, your network is blocking ntfy.sh.</p>
 
 <h2>Bulk send</h2>
 <div class="row">
