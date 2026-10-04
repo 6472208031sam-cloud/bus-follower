@@ -60,7 +60,7 @@
 </head>
 <body>
 <header>
-  <h1>&#x1F68C; Bus Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v2.1</span></h1>
+  <h1>&#x1F68C; Bus Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v2.2</span></h1>
   <div class="seg">
     <button id="btnAM" class="on">AM</button>
     <button id="btnPM">PM</button>
@@ -443,6 +443,11 @@ function backfillFromNtfy(topic) {
       });
       // API returns newest first; process oldest first
       msgs.sort(function (a, b) { return a.time - b.time; });
+      // Only keep today's messages (Toronto date) — user wants same-day only on refresh
+      var todayKey = torontoDateKey(new Date());
+      msgs = msgs.filter(function (m) {
+        return torontoDateKey(new Date(m.time * 1000)) === todayKey;
+      });
       return msgs;
     });
 }
