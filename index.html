@@ -304,6 +304,13 @@ function setRoute(r) {
 var topicInput = document.getElementById('topicInput');
 var connBtn = document.getElementById('connBtn');
 var connDot = document.getElementById('connDot');
+// One-time migration: old channel -> new -01 channel (2026-10-04)
+(function migrateTopic() {
+  var oldT = 'bus-alerts-zpxz5jrwzkl4pwoo', newT = 'bus-alerts-zpxz5jrwzkl4pwoo-01';
+  if (localStorage.getItem('busfollower_topic') === oldT) {
+    localStorage.setItem('busfollower_topic', newT);
+  }
+})();
 topicInput.value = localStorage.getItem('busfollower_topic') || '';
 connBtn.addEventListener('click', function () { evtSrc ? disconnect() : connect(); });
 topicInput.addEventListener('keydown', function (e) { if (e.key === 'Enter' && !evtSrc) connect(); });
