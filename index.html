@@ -365,10 +365,23 @@ function setConn(on, err) {
 /* Backfill recent messages from ntfy's server-side cache so every device
    sees the same shared history (localStorage alone is per-device). */
 function backfillFromNtfy(topic) {
-  return fetch('https://ntfy.sh/' + encodeURIComponent(topic) + '/json?since=24h')
+  // 10s timeout so a hanging fetch can't stall the whole connect flow
+  var ctrl = null, timer = null;
+  try {
+    if (typeof AbortController !== 'undefined') {
+      ctrl = new AbortController();
+      timer = setTimeout(function () { try { ctrl.abort(); } catch (e) {} }, 10000);
+    }
+  } catch (e) {}
+  var opts = ctrl ? { signal: ctrl.signal } : undefined;
+  return fetch('https://ntfy.sh/' + encodeURIComponent(topic) + '/json?since=24h', opts)
     .then(function (resp) {
+      if (timer) clearTimeout(timer);
       if (!resp.ok) throw new Error('HTTP ' + resp.status);
       return resp.text();
+    }, function (err) {
+      if (timer) clearTimeout(timer);
+      throw err;
     })
     .then(function (text) {
       var msgs = [];
