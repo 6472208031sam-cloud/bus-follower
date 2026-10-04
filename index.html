@@ -47,6 +47,12 @@
   .pin.done { background:var(--green); color:#fff; }
   .pin.next { box-shadow:0 0 0 4px rgba(53,208,127,.45); }
   .busdot { width:22px; height:22px; border-radius:50%; background:#2f8bff; border:3px solid #fff; box-shadow:0 0 0 3px rgba(47,139,255,.4), 0 2px 8px rgba(0,0,0,.5); }
+  .datebar { display:flex; align-items:center; gap:8px; padding:8px 14px; background:#0d1712; border-bottom:1px solid #223129; }
+  .datebar label { color:var(--mut); font-size:.85rem; font-weight:700; }
+  #dateSelect { flex:1; padding:8px 10px; border-radius:8px; border:1px solid #2c4034; background:#16241d; color:var(--txt); font-size:.95rem; max-width:320px; }
+  #dateSummary { color:var(--mut); font-size:.82rem; }
+  #histBadge { display:none; font-size:.75rem; font-weight:700; background:#3d2b0b; color:#ffcf5d; border-radius:4px; padding:2px 8px; }
+  #histBadge.on { display:inline-block; }
 </style>
 </head>
 <body>
@@ -60,6 +66,13 @@
 </header>
 
 <div id="map"></div>
+
+<div class="datebar">
+  <label for="dateSelect">View:</label>
+  <select id="dateSelect"><option value="live">&#x1F534; Live</option></select>
+  <span id="histBadge">HISTORY</span>
+  <span id="dateSummary"></span>
+</div>
 
 <div class="bar">
   <div id="statusLine">No bus updates yet</div>
@@ -81,6 +94,7 @@
   <h2>Event log</h2>
   <div class="row">
     <button class="act ghost" id="clearLog">Clear log</button>
+    <button class="act ghost" id="clearHistory">Clear all history</button>
   </div>
   <div id="log"><div id="logEmpty">No events yet. Arrivals posted to the channel will appear here.</div></div>
 </section>
@@ -103,6 +117,87 @@ var state = {
 };
 var lastRoute = null;
 var evtSrc = null;
+
+/* ===== Persistent history (localStorage) ===== */
+var HIST_KEY = 'busfollower_history';
+var viewDate = null; // null = live mode, else 'YYYY-MM-DD'
+
+function torontoDateKey(d) {
+  return d.toLocaleDateString('en-CA', { timeZone: 'America/Toronto' });
+}
+function loadHistory() {
+  try {
+    var h = JSON.parse(localStorage.getItem(HIST_KEY) || '{}');
+    return (h && typeof h === 'object') ? h : {};
+  } catch (e) { return {}; }
+}
+function saveHistory(h) {
+  try { localStorage.setItem(HIST_KEY, JSON.stringify(h)); } catch (e) {}
+}
+function pruneHistory(h) {
+  var cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - 365);
+  var cutoffKey = torontoDateKey(cutoff);
+  Object.keys(h).forEach(function (k) { if (k < cutoffKey) delete h[k]; });
+  return h;
+}
+function recordEvent(r, s, isTest, rawMsg, isFinal) {
+  var now = new Date();
+  var key = torontoDateKey(now);
+  var h = pruneHistory(loadHistory());
+  var day = h[key] || { am: [], pm: [] };
+  var arr = (r === 'AM') ? day.am : day.pm;
+  var evStop = (r === 'AM') ? s.n : s.am;
+  var evLetter = (r === 'AM') ? null : s.letter;
+  // Dedupe: skip if last event for this route+day is the same stop within 60s
+  var last = arr[arr.length - 1];
+  if (last && last.stop === evStop && last.letter === evLetter &&
+      (now.getTime() - new Date(last.time).getTime()) < 60000) {
+    return;
+  }
+  arr.push({ stop: evStop, letter: evLetter, time: now.toISOString(),
+             msg: String(rawMsg), test: !!isTest, final: !!isFinal });
+  if (arr.length > 200) arr.splice(0, arr.length - 200);
+  h[key] = day;
+  saveHistory(h);
+  refreshDatePicker();
+}
+function stateFromEvents(r, events) {
+  var st = { reached: {}, busIdx: -1, complete: false, lastUpdate: null };
+  var list = (r === 'AM') ? AM_STOPS : PM_STOPS;
+  events.forEach(function (ev) {
+    var key = (r === 'AM') ? String(ev.stop) : ev.letter;
+    st.reached[key] = true;
+    var idx = -1;
+    list.forEach(function (s, i) {
+      if ((r === 'AM') ? (s.n === ev.stop) : (s.letter === ev.letter)) idx = i;
+    });
+    if (idx > st.busIdx) st.busIdx = idx;
+    var t = new Date(ev.time);
+    if (!st.lastUpdate || t > st.lastUpdate) st.lastUpdate = t;
+    if (ev.final) { st.complete = true; st.busIdx = list.length - 1; }
+  });
+  return st;
+}
+function getDisplayState(r) {
+  if (!viewDate) return state[r];
+  var h = loadHistory();
+  var day = h[viewDate];
+  if (!day) return { reached: {}, busIdx: -1, complete: false, lastUpdate: null };
+  return stateFromEvents(r, (r === 'AM') ? day.am : day.pm);
+}
+function restoreToday() {
+  var today = torontoDateKey(new Date());
+  var h = loadHistory();
+  var day = h[today];
+  if (!day) return;
+  ['AM', 'PM'].forEach(function (r) {
+    var st = stateFromEvents(r, (r === 'AM') ? day.am : day.pm);
+    state[r] = st;
+    var evs = (r === 'AM') ? day.am : day.pm;
+    if (evs.length) lastRoute = r;
+  });
+}
 
 function stops() { return route === 'AM' ? AM_STOPS : PM_STOPS; }
 function path()  { return route === 'AM' ? AM_PATH  : PM_PATH; }
@@ -128,7 +223,7 @@ function renderRoute() {
   if (pinLayer) map.removeLayer(pinLayer);
   routeLine = L.polyline(path(), { color: '#0b6e4f', weight: 4, opacity: 0.9 }).addTo(map);
   pinLayer = L.layerGroup().addTo(map);
-  var st = state[route], list = stops();
+  var st = getDisplayState(route), list = stops();
   list.forEach(function (s, i) {
     var cls = st.reached[stopKey(s)] ? 'done' : (i === st.busIdx + 1 && !st.complete ? 'next' : '');
     L.marker([s.lat, s.lng], { icon: pinIcon(s, cls) })
@@ -151,7 +246,7 @@ function renderRoute() {
 }
 
 function renderStatus() {
-  var st = state[route], list = stops();
+  var st = getDisplayState(route), list = stops();
   var line = document.getElementById('statusLine'), sub = document.getElementById('subLine');
   var done = Object.keys(st.reached).length;
   document.getElementById('progFill').style.width = (100 * done / list.length) + '%';
@@ -253,16 +348,19 @@ function handleMessage(raw) {
     var s = null;
     PM_STOPS.forEach(function (x) { if (x.letter === mPM[1]) s = x; });
     if (!s) { addLog('Unrecognized stop letter "' + mPM[1] + '": ' + raw, 'PM?', 'warn'); return; }
-    applyArrival('PM', s, isTest);
+    applyArrival('PM', s, isTest, raw);
   } else if (mAM) {
     var n = parseInt(mAM[1], 10), s2 = null;
     AM_STOPS.forEach(function (x) { if (x.n === n) s2 = x; });
     if (!s2) { addLog('Unrecognized stop number "' + n + '": ' + raw, 'AM?', 'warn'); return; }
-    applyArrival('AM', s2, isTest);
+    applyArrival('AM', s2, isTest, raw);
   } else if (mFinal) {
     var r = lastRoute || route;
     var st = state[r], list = r === 'AM' ? AM_STOPS : PM_STOPS;
     st.complete = true; st.busIdx = list.length - 1; st.lastUpdate = new Date();
+    lastRoute = r;
+    recordEvent(r, list[list.length - 1], isTest, raw, true);
+    if (viewDate) return;
     addLog((isTest ? '[TEST] ' : '') + 'Final stop reached (' + r + '). Route complete.',
            (isTest ? 'TEST ' : '') + r, 'test');
     renderRoute();
@@ -271,7 +369,7 @@ function handleMessage(raw) {
   }
 }
 
-function applyArrival(r, s, isTest) {
+function applyArrival(r, s, isTest, rawMsg) {
   var st = state[r], list = r === 'AM' ? AM_STOPS : PM_STOPS;
   var key = r === 'AM' ? String(s.n) : s.letter;
   st.reached[key] = true;
@@ -279,12 +377,148 @@ function applyArrival(r, s, isTest) {
   if (idx > st.busIdx) st.busIdx = idx;
   st.lastUpdate = new Date();
   lastRoute = r;
+  recordEvent(r, s, isTest, rawMsg, false);
+  if (viewDate) return; // history mode: accumulate silently, don't touch the display
   var label = r === 'AM' ? ('Stop ' + s.n) : ('Stop ' + s.letter + ' (' + s.am + ')');
   addLog((isTest ? '[TEST] ' : '') + 'Bus reached ' + label +
          (r !== route ? ' \u2014 switch to ' + r + ' to follow' : ''),
          (isTest ? 'TEST ' : '') + r, isTest ? 'test' : r.toLowerCase());
   if (r === route) renderRoute();
 }
+
+  /* ===== Date picker & history view ===== */
+function dateLabel(key) {
+  var today = torontoDateKey(new Date());
+  var yest = torontoDateKey(new Date(Date.now() - 86400000));
+  if (key === today) return 'Today';
+  if (key === yest) return 'Yesterday';
+  var d = new Date(key + 'T12:00:00');
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'America/Toronto' });
+}
+function refreshDatePicker() {
+  var sel = document.getElementById('dateSelect');
+  var cur = sel.value;
+  var h = loadHistory();
+  var keys = Object.keys(h).sort().reverse();
+  // Rebuild options (keep Live at top)
+  sel.innerHTML = '<option value="live">\uD83D\uDD34 Live</option>';
+  keys.forEach(function (k) {
+    var day = h[k];
+    var amN = (day.am || []).length, pmN = (day.pm || []).length;
+    var opt = document.createElement('option');
+    opt.value = k;
+    opt.textContent = dateLabel(k) + ' (AM ' + amN + ' \u00B7 PM ' + pmN + ')';
+    sel.appendChild(opt);
+  });
+  // Restore selection if it still exists
+  if (cur && (cur === 'live' || h[cur])) sel.value = cur;
+  else if (viewDate && !h[viewDate]) { viewDate = null; sel.value = 'live'; }
+  updateDateSummary();
+}
+function updateDateSummary() {
+  var el = document.getElementById('dateSummary');
+  var badge = document.getElementById('histBadge');
+  if (!viewDate) {
+    el.textContent = '';
+    badge.classList.remove('on');
+    return;
+  }
+  badge.classList.add('on');
+  var h = loadHistory();
+  var day = h[viewDate];
+  if (!day) { el.textContent = 'No data for this date.'; return; }
+  var amN = (day.am || []).length, pmN = (day.pm || []).length;
+  el.textContent = dateLabel(viewDate) + ' \u2014 AM: ' + amN + ' stop' + (amN === 1 ? '' : 's') +
+                   ' \u00B7 PM: ' + pmN + ' stop' + (pmN === 1 ? '' : 's');
+}
+function logEntryFromEvent(r, ev) {
+  var d = document.createElement('div');
+  d.className = 'e';
+  var t = new Date(ev.time).toLocaleTimeString('en-CA', {
+    timeZone: 'America/Toronto', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false
+  });
+  var label = (r === 'AM') ? ('Stop ' + ev.stop) : ('Stop ' + ev.letter + ' (' + ev.stop + ')');
+  var txt = (ev.test ? '[TEST] ' : '') + (ev.final ? 'Final stop reached' : ('Bus reached ' + label));
+  var tagCls = ev.test ? 'test' : r.toLowerCase();
+  d.innerHTML = '<span class="ts">' + esc(t) + '</span>' +
+    '<span class="tag ' + tagCls + '">' + esc((ev.test ? 'TEST ' : '') + r) + '</span>' + esc(txt);
+  return d;
+}
+function renderHistoryView() {
+  var log = document.getElementById('log');
+  log.innerHTML = '';
+  var h = loadHistory();
+  var day = h[viewDate];
+  var events = day ? ((route === 'AM') ? (day.am || []) : (day.pm || [])) : [];
+  if (!events.length) {
+    log.innerHTML = '<div id="logEmpty">No ' + route + ' events on ' + dateLabel(viewDate) + '.</div>';
+  } else {
+    var rev = events.slice().reverse();
+    rev.forEach(function (ev) { log.appendChild(logEntryFromEvent(route, ev)); });
+  }
+  updateDateSummary();
+  renderRoute();
+}
+document.getElementById('dateSelect').addEventListener('change', function () {
+  var v = this.value;
+  if (v === 'live') {
+    viewDate = null;
+    // Rebuild live log from today's accumulated history
+    rebuildLiveLog();
+    renderRoute();
+  } else {
+    viewDate = v;
+    renderHistoryView();
+  }
+  updateDateSummary();
+});
+function rebuildLiveLog() {
+  var log = document.getElementById('log');
+  log.innerHTML = '';
+  var today = torontoDateKey(new Date());
+  var h = loadHistory();
+  var day = h[today];
+  var all = [];
+  if (day) {
+    (day.am || []).forEach(function (ev) { all.push({ r: 'AM', ev: ev }); });
+    (day.pm || []).forEach(function (ev) { all.push({ r: 'PM', ev: ev }); });
+  }
+  if (!all.length) {
+    log.innerHTML = '<div id="logEmpty">No events yet. Arrivals posted to the channel will appear here.</div>';
+    return;
+  }
+  all.sort(function (a, b) { return new Date(b.ev.time) - new Date(a.ev.time); });
+  all.forEach(function (item) { log.appendChild(logEntryFromEvent(item.r, item.ev)); });
+}
+// AM/PM toggle must re-render history log when in history mode
+var _origSetRoute = setRoute;
+setRoute = function (r) {
+  _origSetRoute(r);
+  if (viewDate) renderHistoryView();
+};
+document.getElementById('clearHistory').addEventListener('click', function () {
+  if (!confirm('Delete ALL stored ride history (up to 1 year)? This cannot be undone.')) return;
+  try { localStorage.removeItem(HIST_KEY); } catch (e) {}
+  // Reset live state too
+  state = {
+    AM: { reached: {}, busIdx: -1, complete: false, lastUpdate: null },
+    PM: { reached: {}, busIdx: -1, complete: false, lastUpdate: null }
+  };
+  viewDate = null;
+  document.getElementById('dateSelect').value = 'live';
+  refreshDatePicker();
+  rebuildLiveLog();
+  renderRoute();
+  addLog('All history cleared.', null, '');
+});
+/* ===== Init: restore history ===== */
+(function () {
+  var h = pruneHistory(loadHistory());
+  saveHistory(h);
+  restoreToday();
+  refreshDatePicker();
+  rebuildLiveLog();
+})();
 
 renderRoute();
 </script>
