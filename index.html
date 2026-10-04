@@ -60,7 +60,7 @@
 </head>
 <body>
 <header>
-  <h1>&#x1F68C; Bus Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v1.6</span></h1>
+  <h1>&#x1F68C; Bus Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v1.7</span></h1>
   <div class="seg">
     <button id="btnAM" class="on">AM</button>
     <button id="btnPM">PM</button>
@@ -407,22 +407,65 @@ function connect() {
   disconnect();
   connBtn.disabled = true;
   setConn(false, false);
-  connDot.title = 'Loading history\u2026';
-  backfillFromNtfy(topic).then(function (msgs) {
-    var n = 0;
-    msgs.forEach(function (m) {
-      var iso = new Date(m.time * 1000).toISOString();
-      if (handleMessage(m.message, { time: iso, silent: true, deferUI: true })) n++;
-    });
-    refreshDatePicker();
-    if (!viewDate) { rebuildLiveLog(); renderRoute(); }
-    addLog('Loaded ' + n + ' past alert' + (n === 1 ? '' : 's') + ' from shared history.', 'HIST', '');
-  }).catch(function (e) {
-    addLog('Shared history unavailable (' + (e && e.message ? e.message : e) + ') \u2014 live mode only.', 'HIST', 'warn');
-  }).then(function () {
+  connDot.title = 'Loading history…';
+  // Safety: force-re-enable button after 15s no matter what
+  var safetyTimer = setTimeout(function () {
     connBtn.disabled = false;
-    startSSE(topic);
-  });
+    if (!evtSrc) {
+      addLog('Connection timed out — tap Connect to retry.', 'ERROR', 'warn');
+      setConn(false, true);
+    }
+  }, 15000);
+  function done() {
+    clearTimeout(safetyTimer);
+    connBtn.disabled = false;
+  }
+  try {
+    backfillFromNtfy(topic).then(function (msgs) {
+      var n = 0;
+      try {
+        msgs.forEach(function (m) {
+          var iso = new Date(m.time * 1000).toISOString();
+          if (handleMessage(m.message, { time: iso, silent: true, deferUI: true })) n++;
+        });
+        refreshDatePicker();
+        if (!viewDate) { rebuildLiveLog(); renderRoute(); }
+      } catch (e) {}
+      addLog('Loaded ' + n + ' past alert' + (n === 1 ? '' : 's') + ' from shared history.', 'HIST', '');
+    }).catch(function (e) {
+      addLog('Shared history unavailable (' + (e && e.message ? e.message : e) + ') — live mode only.', 'HIST', 'warn');
+    }).then(function () {
+      done();
+      startSSE(topic);
+      startPolling(topic);
+    });
+  } catch (e) {
+    done();
+    addLog('Connect failed: ' + e.message, 'ERROR', 'warn');
+    setConn(false, true);
+  }
+}
+// Polling fallback: re-backfill every 20s so new devices stay in sync even if SSE drops
+var pollTimer = null;
+function startPolling(topic) {
+  stopPolling();
+  pollTimer = setInterval(function () {
+    if (document.hidden) return;
+    backfillFromNtfy(topic).then(function (msgs) {
+      var n = 0;
+      msgs.forEach(function (m) {
+        var iso = new Date(m.time * 1000).toISOString();
+        if (handleMessage(m.message, { time: iso, silent: true, deferUI: true })) n++;
+      });
+      if (n > 0) {
+        refreshDatePicker();
+        if (!viewDate) { rebuildLiveLog(); renderRoute(); }
+      }
+    }).catch(function () {});
+  }, 20000);
+}
+function stopPolling() {
+  if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
 }
 function startSSE(topic) {
   try {
@@ -452,6 +495,7 @@ function startSSE(topic) {
 }
 function disconnect() {
   if (evtSrc) { try { evtSrc.close(); } catch (e) {} evtSrc = null; }
+  stopPolling();
   setConn(false, false);
 }
 
