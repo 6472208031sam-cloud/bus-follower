@@ -60,7 +60,7 @@
 </head>
 <body>
 <header>
-  <h1>&#x1F68C; Bus Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v2.2</span></h1>
+  <h1>&#x1F68C; Bus Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v2.3</span></h1>
   <div class="seg">
     <button id="btnAM" class="on">AM</button>
     <button id="btnPM">PM</button>
@@ -401,7 +401,10 @@ function backfillFromNtfy(topic) {
     return fetchWithTimeout(htmlUrl, 10000).then(function (resp) {
       if (!resp.ok) throw new Error('HTTP ' + resp.status);
       return resp.text();
-    }).then(parseHtmlMessages);
+    }).then(function (html) {
+      addLog('HTML page fetched: ' + html.length + ' chars', 'DEBUG', '');
+      return parseHtmlMessages(html);
+    });
   }
   function fetchHtmlViaProxy() {
     var htmlProxy = 'https://api.allorigins.win/raw?url=' + encodeURIComponent(htmlUrl);
@@ -414,6 +417,9 @@ function backfillFromNtfy(topic) {
     return fetchWithTimeout(directUrl, 8000).then(function (resp) {
       if (!resp.ok) throw new Error('HTTP ' + resp.status);
       return resp.text();
+    }).then(function (text) {
+      addLog('JSON API returned: ' + text.length + ' chars', 'DEBUG', '');
+      return text;
     });
   }
   function fetchProxyJson() {
