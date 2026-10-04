@@ -55,9 +55,11 @@
 <div id="log"></div>
 
 <script>
-// Migrate old channel -> new -01 channel (2026-10-04)
+// Migrate old channels -> new channel (2026-10-04)
 (function () {
-  if (localStorage.getItem('busfollower_topic') === 'bus-alerts-zpxz5jrwzkl4pwoo') {
+  var olds = ['bus-alerts-zpxz5jrwzkl4pwoo', 'bus-alerts-zpxz5jrwzkl4pwoo-01'];
+  var cur = localStorage.getItem('busfollower_topic');
+  if (olds.indexOf(cur) !== -1) {
     localStorage.setItem('busfollower_topic', 'bus-alerts-01-hdkdhsjbd');
   }
 })();
