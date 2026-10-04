@@ -60,7 +60,7 @@
 </head>
 <body>
 <header>
-  <h1>&#x1F68C; Bus Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v2.3</span></h1>
+  <h1>&#x1F68C; Bus Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v2.4</span></h1>
   <div class="seg">
     <button id="btnAM" class="on">AM</button>
     <button id="btnPM">PM</button>
@@ -366,6 +366,12 @@ function setConn(on, err) {
 }
 /* Backfill recent messages from ntfy's server-side cache so every device
    sees the same shared history (localStorage alone is per-device). */
+// Global error catcher: log JS errors to the event log for debugging
+window.onerror = function (msg, src, line) {
+  try {
+    addLog('JS Error: ' + msg + ' (line ' + line + ')', 'ERROR', 'warn');
+  } catch (e) {}
+};
 function fetchWithTimeout(url, ms) {
   var ctrl = null, timer = null;
   try {
@@ -465,37 +471,24 @@ function connect() {
   connBtn.disabled = true;
   setConn(false, false);
   connDot.title = 'Loading history…';
-  // Safety: force-re-enable button after 45s no matter what (full chain can take ~42s)
+  // Safety: force-re-enable button after 15s no matter what
   var safetyTimer = setTimeout(function () {
     connBtn.disabled = false;
     if (!evtSrc) {
       addLog('Connection timed out — tap Connect to retry.', 'ERROR', 'warn');
       setConn(false, true);
     }
-  }, 45000);
+  }, 15000);
   function done() {
     clearTimeout(safetyTimer);
     connBtn.disabled = false;
   }
   try {
-    backfillFromNtfy(topic).then(function (msgs) {
-      var n = 0;
-      try {
-        msgs.forEach(function (m) {
-          var iso = new Date(m.time * 1000).toISOString();
-          if (handleMessage(m.message, { time: iso, silent: true, deferUI: true })) n++;
-        });
-        refreshDatePicker();
-        if (!viewDate) { rebuildLiveLog(); renderRoute(); }
-      } catch (e) {}
-      addLog('Loaded ' + n + ' past alert' + (n === 1 ? '' : 's') + ' from shared history.', 'HIST', '');
-    }).catch(function (e) {
-      addLog('Shared history unavailable (' + (e && e.message ? e.message : e) + ') — live mode only.', 'HIST', 'warn');
-    }).then(function () {
-      done();
-      startSSE(topic);
-      startPolling(topic);
-    });
+    // SSE with ?since=24h loads today's history then streams live updates.
+    // No separate backfill fetch needed.
+    startSSE(topic);
+    startPolling(topic);
+    done();
   } catch (e) {
     done();
     addLog('Connect failed: ' + e.message, 'ERROR', 'warn');
@@ -505,28 +498,25 @@ function connect() {
 // Polling fallback: re-backfill every 20s so new devices stay in sync even if SSE drops
 var pollTimer = null;
 function startPolling(topic) {
+  // Disabled: SSE with ?since=24h already loads history + live updates.
+  // Kept as a stub in case we need a fallback later.
   stopPolling();
-  pollTimer = setInterval(function () {
-    if (document.hidden) return;
-    backfillFromNtfy(topic).then(function (msgs) {
-      var n = 0;
-      msgs.forEach(function (m) {
-        var iso = new Date(m.time * 1000).toISOString();
-        if (handleMessage(m.message, { time: iso, silent: true, deferUI: true })) n++;
-      });
-      if (n > 0) {
-        refreshDatePicker();
-        if (!viewDate) { rebuildLiveLog(); renderRoute(); }
-      }
-    }).catch(function () {});
-  }, 20000);
 }
 function stopPolling() {
   if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
 }
 function startSSE(topic) {
   try {
-    evtSrc = new EventSource('https://ntfy.sh/' + encodeURIComponent(topic) + '/sse');
+    evtSrc = new EventSource('https://ntfy.sh/' + encodeURIComponent(topic) + '/sse?since=24h');
+  // ?since=24h pulls recent history first, then live updates on the same stream.
+  // handleMessage buckets by Toronto date, so only today's show in the live view.
+  var histCount = 0, histDone = false;
+  setTimeout(function () {
+    if (!histDone) {
+      histDone = true;
+      if (histCount > 0) addLog('Loaded ' + histCount + ' past alert' + (histCount === 1 ? '' : 's') + ' from today.', 'HIST', '');
+    }
+  }, 3000);
   } catch (e) {
     addLog('Could not open connection: ' + e.message, 'ERROR', 'warn');
     setConn(false, true);
@@ -544,6 +534,8 @@ function startSSE(topic) {
     try {
       var data = JSON.parse(ev.data);
       if (data.event === 'message' && data.message) {
+        var msgDate = data.time ? torontoDateKey(new Date(data.time * 1000)) : torontoDateKey(new Date());
+        if (!histDone && msgDate === torontoDateKey(new Date())) histCount++;
         var o = data.time ? { time: new Date(data.time * 1000).toISOString() } : undefined;
         handleMessage(data.message, o);
       }
