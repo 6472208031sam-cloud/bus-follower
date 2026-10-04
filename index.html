@@ -53,6 +53,7 @@
   #dateSummary { color:var(--mut); font-size:.82rem; }
   #histBadge { display:none; font-size:.75rem; font-weight:700; background:#3d2b0b; color:#ffcf5d; border-radius:4px; padding:2px 8px; }
   #histBadge.on { display:inline-block; }
+  .histnote { padding:6px 14px; color:var(--mut); font-size:.78rem; background:#0d1712; border-bottom:1px solid #223129; }
 </style>
 </head>
 <body>
@@ -73,6 +74,7 @@
   <span id="histBadge">HISTORY</span>
   <span id="dateSummary"></span>
 </div>
+<div class="histnote">Shared history covers recent alerts (ntfy keeps ~12h) and is the same on every device. This device also keeps up to 1 year locally.</div>
 
 <div class="bar">
   <div id="statusLine">No bus updates yet</div>
@@ -141,26 +143,30 @@ function pruneHistory(h) {
   Object.keys(h).forEach(function (k) { if (k < cutoffKey) delete h[k]; });
   return h;
 }
-function recordEvent(r, s, isTest, rawMsg, isFinal) {
-  var now = new Date();
+function recordEvent(r, s, isTest, rawMsg, isFinal, whenISO, deferUI) {
+  var now = whenISO ? new Date(whenISO) : new Date();
   var key = torontoDateKey(now);
   var h = pruneHistory(loadHistory());
   var day = h[key] || { am: [], pm: [] };
   var arr = (r === 'AM') ? day.am : day.pm;
   var evStop = (r === 'AM') ? s.n : s.am;
   var evLetter = (r === 'AM') ? null : s.letter;
-  // Dedupe: skip if last event for this route+day is the same stop within 60s
-  var last = arr[arr.length - 1];
-  if (last && last.stop === evStop && last.letter === evLetter &&
-      (now.getTime() - new Date(last.time).getTime()) < 60000) {
-    return;
+  // Dedupe: skip if any event for this route+day is the same stop within 60s
+  var t = now.getTime();
+  for (var i = 0; i < arr.length; i++) {
+    var e = arr[i];
+    if (e.stop === evStop && e.letter === evLetter &&
+        Math.abs(t - new Date(e.time).getTime()) < 60000) {
+      return false;
+    }
   }
   arr.push({ stop: evStop, letter: evLetter, time: now.toISOString(),
              msg: String(rawMsg), test: !!isTest, final: !!isFinal });
   if (arr.length > 200) arr.splice(0, arr.length - 200);
   h[key] = day;
   saveHistory(h);
-  refreshDatePicker();
+  if (!deferUI) refreshDatePicker();
+  return true;
 }
 function stateFromEvents(r, events) {
   var st = { reached: {}, busIdx: -1, complete: false, lastUpdate: null };
@@ -305,11 +311,54 @@ function setConn(on, err) {
   connDot.title = on ? 'Connected' : (err ? 'Error' : 'Disconnected');
   connBtn.textContent = on ? 'Disconnect' : 'Connect';
 }
+/* Backfill recent messages from ntfy's server-side cache so every device
+   sees the same shared history (localStorage alone is per-device). */
+function backfillFromNtfy(topic) {
+  return fetch('https://ntfy.sh/' + encodeURIComponent(topic) + '/json?since=24h')
+    .then(function (resp) {
+      if (!resp.ok) throw new Error('HTTP ' + resp.status);
+      return resp.text();
+    })
+    .then(function (text) {
+      var msgs = [];
+      text.split('\n').forEach(function (line) {
+        line = line.trim();
+        if (!line) return;
+        try {
+          var o = JSON.parse(line);
+          if (o && o.event === 'message' && o.message && o.time) msgs.push(o);
+        } catch (e) {}
+      });
+      // API returns newest first; process oldest first
+      msgs.sort(function (a, b) { return a.time - b.time; });
+      return msgs;
+    });
+}
 function connect() {
   var topic = topicInput.value.trim();
   if (!topic) { addLog('Enter a channel name first.', null, ''); return; }
   localStorage.setItem('busfollower_topic', topic);
   disconnect();
+  connBtn.disabled = true;
+  setConn(false, false);
+  connDot.title = 'Loading history\u2026';
+  backfillFromNtfy(topic).then(function (msgs) {
+    var n = 0;
+    msgs.forEach(function (m) {
+      var iso = new Date(m.time * 1000).toISOString();
+      if (handleMessage(m.message, { time: iso, silent: true, deferUI: true })) n++;
+    });
+    refreshDatePicker();
+    if (!viewDate) { rebuildLiveLog(); renderRoute(); }
+    addLog('Loaded ' + n + ' past alert' + (n === 1 ? '' : 's') + ' from shared history.', 'HIST', '');
+  }).catch(function (e) {
+    addLog('Shared history unavailable (' + (e && e.message ? e.message : e) + ') \u2014 live mode only.', 'HIST', 'warn');
+  }).then(function () {
+    connBtn.disabled = false;
+    startSSE(topic);
+  });
+}
+function startSSE(topic) {
   try {
     evtSrc = new EventSource('https://ntfy.sh/' + encodeURIComponent(topic) + '/sse');
   } catch (e) {
@@ -328,7 +377,10 @@ function connect() {
   evtSrc.onmessage = function (ev) {
     try {
       var data = JSON.parse(ev.data);
-      if (data.event === 'message' && data.message) handleMessage(data.message);
+      if (data.event === 'message' && data.message) {
+        var o = data.time ? { time: new Date(data.time * 1000).toISOString() } : undefined;
+        handleMessage(data.message, o);
+      }
     } catch (e) { /* keepalive */ }
   };
 }
@@ -338,52 +390,59 @@ function disconnect() {
 }
 
 /* ===== Message parsing ===== */
-function handleMessage(raw) {
+function handleMessage(raw, opts) {
   var msg = String(raw), isTest = false;
   if (msg.indexOf(BELL + ' TEST:') === 0) { isTest = true; msg = msg.slice((BELL + ' TEST:').length).trim(); }
   var mPM = msg.match(new RegExp('^' + BUS + ' Stop ([A-Z]) \\((\\d+)\\):'));
   var mAM = msg.match(new RegExp('^' + BUS + ' Stop (\\d+):'));
   var mFinal = msg.indexOf(BUS + ' Final stop reached:') === 0;
+  var silent = !!(opts && opts.silent);
   if (mPM) {
     var s = null;
     PM_STOPS.forEach(function (x) { if (x.letter === mPM[1]) s = x; });
-    if (!s) { addLog('Unrecognized stop letter "' + mPM[1] + '": ' + raw, 'PM?', 'warn'); return; }
-    applyArrival('PM', s, isTest, raw);
+    if (!s) { if (!silent) addLog('Unrecognized stop letter "' + mPM[1] + '": ' + raw, 'PM?', 'warn'); return false; }
+    return applyArrival('PM', s, isTest, raw, opts);
   } else if (mAM) {
     var n = parseInt(mAM[1], 10), s2 = null;
     AM_STOPS.forEach(function (x) { if (x.n === n) s2 = x; });
-    if (!s2) { addLog('Unrecognized stop number "' + n + '": ' + raw, 'AM?', 'warn'); return; }
-    applyArrival('AM', s2, isTest, raw);
+    if (!s2) { if (!silent) addLog('Unrecognized stop number "' + n + '": ' + raw, 'AM?', 'warn'); return false; }
+    return applyArrival('AM', s2, isTest, raw, opts);
   } else if (mFinal) {
     var r = lastRoute || route;
     var st = state[r], list = r === 'AM' ? AM_STOPS : PM_STOPS;
-    st.complete = true; st.busIdx = list.length - 1; st.lastUpdate = new Date();
+    var whenF = (opts && opts.time) ? new Date(opts.time) : new Date();
+    st.complete = true; st.busIdx = list.length - 1; st.lastUpdate = whenF;
     lastRoute = r;
-    recordEvent(r, list[list.length - 1], isTest, raw, true);
-    if (viewDate) return;
+    var addedF = recordEvent(r, list[list.length - 1], isTest, raw, true,
+                             opts && opts.time, opts && opts.deferUI);
+    if (viewDate || silent) return addedF;
     addLog((isTest ? '[TEST] ' : '') + 'Final stop reached (' + r + '). Route complete.',
            (isTest ? 'TEST ' : '') + r, 'test');
     renderRoute();
+    return addedF;
   } else {
-    addLog('Unrecognized message: ' + raw, '???', 'warn');
+    if (!silent) addLog('Unrecognized message: ' + raw, '???', 'warn');
+    return false;
   }
 }
 
-function applyArrival(r, s, isTest, rawMsg) {
+function applyArrival(r, s, isTest, rawMsg, opts) {
   var st = state[r], list = r === 'AM' ? AM_STOPS : PM_STOPS;
   var key = r === 'AM' ? String(s.n) : s.letter;
   st.reached[key] = true;
   var idx = list.indexOf(s);
   if (idx > st.busIdx) st.busIdx = idx;
-  st.lastUpdate = new Date();
+  st.lastUpdate = (opts && opts.time) ? new Date(opts.time) : new Date();
   lastRoute = r;
-  recordEvent(r, s, isTest, rawMsg, false);
-  if (viewDate) return; // history mode: accumulate silently, don't touch the display
+  var added = recordEvent(r, s, isTest, rawMsg, false, opts && opts.time, opts && opts.deferUI);
+  if (viewDate) return added; // history mode: accumulate silently, don't touch the display
+  if (opts && opts.silent) return added; // backfill: rendering deferred to the end
   var label = r === 'AM' ? ('Stop ' + s.n) : ('Stop ' + s.letter + ' (' + s.am + ')');
   addLog((isTest ? '[TEST] ' : '') + 'Bus reached ' + label +
          (r !== route ? ' \u2014 switch to ' + r + ' to follow' : ''),
          (isTest ? 'TEST ' : '') + r, isTest ? 'test' : r.toLowerCase());
   if (r === route) renderRoute();
+  return added;
 }
 
   /* ===== Date picker & history view ===== */
