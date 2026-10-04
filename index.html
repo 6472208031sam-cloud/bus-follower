@@ -87,7 +87,7 @@
 <section>
   <h2>Channel</h2>
   <div class="row">
-    <input type="text" id="topicInput" placeholder="ntfy channel name" autocomplete="off" />
+    <input type="text" id="topicInput" placeholder="ntfy channel name" autocomplete="off" value="bus-alerts-zpxz5jrwzkl4pwoo-01" />
     <button class="act" id="connBtn">Connect</button>
     <button class="act ghost" id="refreshBtn" title="Re-check for new alerts">↻</button>
   </div>
@@ -306,14 +306,16 @@ function setRoute(r) {
 var topicInput = document.getElementById('topicInput');
 var connBtn = document.getElementById('connBtn');
 var connDot = document.getElementById('connDot');
+// Hardcoded default channel (editable); localStorage overrides if user changed it
+var HARDCODED_TOPIC = 'bus-alerts-zpxz5jrwzkl4pwoo-01';
 // One-time migration: old channel -> new -01 channel (2026-10-04)
 (function migrateTopic() {
-  var oldT = 'bus-alerts-zpxz5jrwzkl4pwoo', newT = 'bus-alerts-zpxz5jrwzkl4pwoo-01';
+  var oldT = 'bus-alerts-zpxz5jrwzkl4pwoo';
   if (localStorage.getItem('busfollower_topic') === oldT) {
-    localStorage.setItem('busfollower_topic', newT);
+    localStorage.setItem('busfollower_topic', HARDCODED_TOPIC);
   }
 })();
-topicInput.value = localStorage.getItem('busfollower_topic') || '';
+topicInput.value = localStorage.getItem('busfollower_topic') || HARDCODED_TOPIC;
 connBtn.addEventListener('click', function () { evtSrc ? disconnect() : connect(); });
 topicInput.addEventListener('keydown', function (e) { if (e.key === 'Enter' && !evtSrc) connect(); });
 // Manual refresh button: re-backfill shared history
