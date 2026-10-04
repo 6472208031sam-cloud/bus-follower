@@ -87,6 +87,7 @@
   <div class="row">
     <input type="text" id="topicInput" placeholder="ntfy channel name" autocomplete="off" />
     <button class="act" id="connBtn">Connect</button>
+    <button class="act ghost" id="refreshBtn" title="Re-check for new alerts">↻</button>
   </div>
   <details class="help">
     <summary>Where do I find the channel name?</summary>
@@ -306,10 +307,46 @@ var connDot = document.getElementById('connDot');
 topicInput.value = localStorage.getItem('busfollower_topic') || '';
 connBtn.addEventListener('click', function () { evtSrc ? disconnect() : connect(); });
 topicInput.addEventListener('keydown', function (e) { if (e.key === 'Enter' && !evtSrc) connect(); });
+// Manual refresh button: re-backfill shared history
+document.getElementById('refreshBtn').addEventListener('click', function () {
+  var topic = topicInput.value.trim();
+  if (!topic) return;
+  addLog('Checking for new alerts…', 'SYNC', '');
+  backfillFromNtfy(topic).then(function (msgs) {
+    var n = 0;
+    msgs.forEach(function (m) {
+      var iso = new Date(m.time * 1000).toISOString();
+      if (handleMessage(m.message, { time: iso, silent: true, deferUI: true })) n++;
+    });
+    refreshDatePicker();
+    if (!viewDate) { rebuildLiveLog(); renderRoute(); }
+    addLog(n > 0 ? ('Found ' + n + ' new alert' + (n === 1 ? '' : 's') + '.') : 'No new alerts.', 'SYNC', '');
+  }).catch(function (e) {
+    addLog('Refresh failed: ' + (e && e.message ? e.message : e), 'SYNC', 'warn');
+  });
+});
 // Auto-connect on load if a topic is saved
 if (topicInput.value.trim()) {
   setTimeout(function () { connect(); }, 500);
 }
+// Re-backfill when tab becomes visible again (mobile browsers suspend SSE in background tabs)
+document.addEventListener('visibilitychange', function () {
+  if (!document.hidden && topicInput.value.trim() && evtSrc) {
+    // Tab is visible again: refresh shared history to catch anything missed while suspended
+    backfillFromNtfy(topicInput.value.trim()).then(function (msgs) {
+      var n = 0;
+      msgs.forEach(function (m) {
+        var iso = new Date(m.time * 1000).toISOString();
+        if (handleMessage(m.message, { time: iso, silent: true, deferUI: true })) n++;
+      });
+      if (n > 0) {
+        refreshDatePicker();
+        if (!viewDate) { rebuildLiveLog(); renderRoute(); }
+        addLog('Caught up: ' + n + ' new alert' + (n === 1 ? '' : 's') + ' while away.', 'SYNC', '');
+      }
+    }).catch(function () {});
+  }
+});
 
 function setConn(on, err) {
   connDot.className = on ? 'ok' : (err ? 'err' : '');
