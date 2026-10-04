@@ -557,7 +557,10 @@ function handleMessage(raw, opts) {
   // AM: test format "Stop 10: <name> reached." OR real app format "Stop 10 reached: <name>."
   var mAM = msg.match(new RegExp('^' + BUS + ' Stop (\\d+):'))
          || msg.match(new RegExp('^' + BUS + ' Stop (\\d+) reached:'));
-  var mFinal = msg.indexOf(BUS + ' Final stop reached:') === 0;
+  // Final: "Final stop reached (AM):" or "(PM):" or legacy "Final stop reached:"
+  var mFinalAM = msg.indexOf(BUS + ' Final stop reached (AM):') === 0;
+  var mFinalPM = msg.indexOf(BUS + ' Final stop reached (PM):') === 0;
+  var mFinal = mFinalAM || mFinalPM || msg.indexOf(BUS + ' Final stop reached:') === 0;
   var silent = !!(opts && opts.silent);
   if (mPM) {
     var s = null;
@@ -570,7 +573,7 @@ function handleMessage(raw, opts) {
     if (!s2) { if (!silent) addLog('Unrecognized stop number "' + n + '": ' + raw, 'AM?', 'warn'); return false; }
     return applyArrival('AM', s2, isTest, raw, opts);
   } else if (mFinal) {
-    var r = lastRoute || route;
+    var r = mFinalAM ? 'AM' : (mFinalPM ? 'PM' : (lastRoute || route));
     var st = state[r], list = r === 'AM' ? AM_STOPS : PM_STOPS;
     var whenF = (opts && opts.time) ? new Date(opts.time) : new Date();
     st.complete = true; st.busIdx = list.length - 1; st.lastUpdate = whenF;
