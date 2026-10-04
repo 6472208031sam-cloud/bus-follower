@@ -60,7 +60,7 @@
 </head>
 <body>
 <header>
-  <h1>&#x1F68C; Bus Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v2.0</span></h1>
+  <h1>&#x1F68C; Bus Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v2.1</span></h1>
   <div class="seg">
     <button id="btnAM" class="on">AM</button>
     <button id="btnPM">PM</button>
@@ -386,22 +386,29 @@ function fetchWithTimeout(url, ms) {
 function backfillFromNtfy(topic) {
   var directUrl = 'https://ntfy.sh/' + encodeURIComponent(topic) + '/json?since=24h';
   var htmlUrl = 'https://ntfy.sh/' + encodeURIComponent(topic);
+  function parseHtmlMessages(html) {
+    var found = [];
+    var re = /🔔 TEST: 🚌 Stop [^<]{1,200}? reached\.|🚌 Stop [^<]{1,200}? reached\.|🚌 Final stop reached:[^<]{1,200}?\./g;
+    var m, now = Math.floor(Date.now() / 1000);
+    while ((m = re.exec(html)) !== null) {
+      var txt = m[0].replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>');
+      found.push({ event: 'message', message: txt, time: now });
+      now--;
+    }
+    return found.map(function (f) { return JSON.stringify(f); }).join('\n');
+  }
+  function fetchHtmlDirect() {
+    return fetchWithTimeout(htmlUrl, 10000).then(function (resp) {
+      if (!resp.ok) throw new Error('HTTP ' + resp.status);
+      return resp.text();
+    }).then(parseHtmlMessages);
+  }
   function fetchHtmlViaProxy() {
     var htmlProxy = 'https://api.allorigins.win/raw?url=' + encodeURIComponent(htmlUrl);
-    return fetchWithTimeout(htmlProxy, 12000).then(function (resp3) {
-      if (!resp3.ok) throw new Error('HTTP ' + resp3.status);
-      return resp3.text();
-    }).then(function (html) {
-      var found = [];
-      var re = /🔔 TEST: 🚌 Stop [^<]{1,200}? reached\.|🚌 Stop [^<]{1,200}? reached\.|🚌 Final stop reached:[^<]{1,200}?\./g;
-      var m, now = Math.floor(Date.now() / 1000);
-      while ((m = re.exec(html)) !== null) {
-        var txt = m[0].replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>');
-        found.push({ event: 'message', message: txt, time: now });
-        now--;
-      }
-      return found.map(function (f) { return JSON.stringify(f); }).join('\n');
-    });
+    return fetchWithTimeout(htmlProxy, 12000).then(function (resp) {
+      if (!resp.ok) throw new Error('HTTP ' + resp.status);
+      return resp.text();
+    }).then(parseHtmlMessages);
   }
   function fetchDirectJson() {
     return fetchWithTimeout(directUrl, 8000).then(function (resp) {
@@ -416,10 +423,12 @@ function backfillFromNtfy(topic) {
       return resp2.text();
     });
   }
-  // Order: HTML page via proxy (3) -> direct JSON API (1) -> JSON API via proxy (2)
-  return fetchHtmlViaProxy().catch(function (e3) {
+  // Order: HTML direct -> HTML via proxy -> direct JSON -> JSON via proxy
+  return fetchHtmlDirect().catch(function () {
+    return fetchHtmlViaProxy();
+  }).catch(function () {
     return fetchDirectJson();
-  }).catch(function (e1) {
+  }).catch(function () {
     return fetchProxyJson();
   })
     .then(function (text) {
@@ -445,14 +454,14 @@ function connect() {
   connBtn.disabled = true;
   setConn(false, false);
   connDot.title = 'Loading history…';
-  // Safety: force-re-enable button after 15s no matter what
+  // Safety: force-re-enable button after 45s no matter what (full chain can take ~42s)
   var safetyTimer = setTimeout(function () {
     connBtn.disabled = false;
     if (!evtSrc) {
       addLog('Connection timed out — tap Connect to retry.', 'ERROR', 'warn');
       setConn(false, true);
     }
-  }, 15000);
+  }, 45000);
   function done() {
     clearTimeout(safetyTimer);
     connBtn.disabled = false;
