@@ -60,7 +60,7 @@
 </head>
 <body>
 <header>
-  <h1>&#x1F68C; Bus Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v1.7</span></h1>
+  <h1>&#x1F68C; Bus Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v1.8</span></h1>
   <div class="seg">
     <button id="btnAM" class="on">AM</button>
     <button id="btnPM">PM</button>
@@ -366,24 +366,35 @@ function setConn(on, err) {
 }
 /* Backfill recent messages from ntfy's server-side cache so every device
    sees the same shared history (localStorage alone is per-device). */
-function backfillFromNtfy(topic) {
-  // 10s timeout so a hanging fetch can't stall the whole connect flow
+function fetchWithTimeout(url, ms) {
   var ctrl = null, timer = null;
   try {
     if (typeof AbortController !== 'undefined') {
       ctrl = new AbortController();
-      timer = setTimeout(function () { try { ctrl.abort(); } catch (e) {} }, 10000);
+      timer = setTimeout(function () { try { ctrl.abort(); } catch (e) {} }, ms || 10000);
     }
   } catch (e) {}
   var opts = ctrl ? { signal: ctrl.signal } : undefined;
-  return fetch('https://ntfy.sh/' + encodeURIComponent(topic) + '/json?since=24h', opts)
-    .then(function (resp) {
-      if (timer) clearTimeout(timer);
+  return fetch(url, opts).then(function (resp) {
+    if (timer) clearTimeout(timer);
+    return resp;
+  }, function (err) {
+    if (timer) clearTimeout(timer);
+    throw err;
+  });
+}
+function backfillFromNtfy(topic) {
+  var directUrl = 'https://ntfy.sh/' + encodeURIComponent(topic) + '/json?since=24h';
+  // Try direct first, fall back to CORS proxy if direct times out/fails
+  return fetchWithTimeout(directUrl, 8000).then(function (resp) {
       if (!resp.ok) throw new Error('HTTP ' + resp.status);
       return resp.text();
-    }, function (err) {
-      if (timer) clearTimeout(timer);
-      throw err;
+    }).catch(function (e1) {
+      var proxyUrl = 'https://api.allorigins.win/raw?url=' + encodeURIComponent(directUrl);
+      return fetchWithTimeout(proxyUrl, 12000).then(function (resp2) {
+        if (!resp2.ok) throw new Error('HTTP ' + resp2.status);
+        return resp2.text();
+      });
     })
     .then(function (text) {
       var msgs = [];
