@@ -60,7 +60,7 @@
 </head>
 <body>
 <header>
-  <h1>&#x1F68C; Bus Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v2.5</span></h1>
+  <h1>&#x1F68C; Bus Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v2.6</span></h1>
   <div class="seg">
     <button id="btnAM" class="on">AM</button>
     <button id="btnPM">PM</button>
@@ -554,7 +554,9 @@ function handleMessage(raw, opts) {
   var msg = String(raw), isTest = false;
   if (msg.indexOf(BELL + ' TEST:') === 0) { isTest = true; msg = msg.slice((BELL + ' TEST:').length).trim(); }
   var mPM = msg.match(new RegExp('^' + BUS + ' Stop ([A-Z]) \\((\\d+)\\):'));
-  var mAM = msg.match(new RegExp('^' + BUS + ' Stop (\\d+):'));
+  // AM: test format "Stop 10: <name> reached." OR real app format "Stop 10 reached: <name>."
+  var mAM = msg.match(new RegExp('^' + BUS + ' Stop (\\d+):'))
+         || msg.match(new RegExp('^' + BUS + ' Stop (\\d+) reached:'));
   var mFinal = msg.indexOf(BUS + ' Final stop reached:') === 0;
   var silent = !!(opts && opts.silent);
   if (mPM) {
