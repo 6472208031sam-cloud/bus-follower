@@ -60,7 +60,7 @@
 </head>
 <body>
 <header>
-  <h1>&#x1F68C; Bus Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v1.8</span></h1>
+  <h1>&#x1F68C; Bus Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v1.9</span></h1>
   <div class="seg">
     <button id="btnAM" class="on">AM</button>
     <button id="btnPM">PM</button>
@@ -385,7 +385,8 @@ function fetchWithTimeout(url, ms) {
 }
 function backfillFromNtfy(topic) {
   var directUrl = 'https://ntfy.sh/' + encodeURIComponent(topic) + '/json?since=24h';
-  // Try direct first, fall back to CORS proxy if direct times out/fails
+  var htmlUrl = 'https://ntfy.sh/' + encodeURIComponent(topic);
+  // Try: direct JSON API -> JSON API via proxy -> HTML page via proxy (parse messages from HTML)
   return fetchWithTimeout(directUrl, 8000).then(function (resp) {
       if (!resp.ok) throw new Error('HTTP ' + resp.status);
       return resp.text();
@@ -394,6 +395,27 @@ function backfillFromNtfy(topic) {
       return fetchWithTimeout(proxyUrl, 12000).then(function (resp2) {
         if (!resp2.ok) throw new Error('HTTP ' + resp2.status);
         return resp2.text();
+      });
+    }).catch(function (e2) {
+      // Last resort: fetch the HTML topic page via proxy and extract messages
+      var htmlProxy = 'https://api.allorigins.win/raw?url=' + encodeURIComponent(htmlUrl);
+      return fetchWithTimeout(htmlProxy, 12000).then(function (resp3) {
+        if (!resp3.ok) throw new Error('HTTP ' + resp3.status);
+        return resp3.text();
+      }).then(function (html) {
+        // Extract message texts from HTML; use current time (HTML page doesn't show timestamps reliably)
+        var found = [];
+        // Look for the bus emoji + Stop pattern in the HTML
+        var re = /🔔 TEST: 🚌 Stop [^<]{1,200}? reached\.|🚌 Stop [^<]{1,200}? reached\.|🚌 Final stop reached:[^<]{1,200}?\./g;
+        var m, now = Math.floor(Date.now() / 1000);
+        while ((m = re.exec(html)) !== null) {
+          // Decode HTML entities
+          var txt = m[0].replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>');
+          found.push({ event: 'message', message: txt, time: now });
+          now--; // ensure ordering (newest first in HTML, we'll sort later)
+        }
+        // Return as newline-delimited JSON so the normal parser handles it
+        return found.map(function (f) { return JSON.stringify(f); }).join('\n');
       });
     })
     .then(function (text) {
