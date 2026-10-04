@@ -306,6 +306,10 @@ var connDot = document.getElementById('connDot');
 topicInput.value = localStorage.getItem('busfollower_topic') || '';
 connBtn.addEventListener('click', function () { evtSrc ? disconnect() : connect(); });
 topicInput.addEventListener('keydown', function (e) { if (e.key === 'Enter' && !evtSrc) connect(); });
+// Auto-connect on load if a topic is saved
+if (topicInput.value.trim()) {
+  setTimeout(function () { connect(); }, 500);
+}
 
 function setConn(on, err) {
   connDot.className = on ? 'ok' : (err ? 'err' : '');
