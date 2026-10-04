@@ -57,13 +57,13 @@
 <script>
 // Migrate old channels -> new channel (2026-10-04)
 (function () {
-  var olds = ['bus-alerts-zpxz5jrwzkl4pwoo', 'bus-alerts-zpxz5jrwzkl4pwoo-01'];
+  var olds = ['bus-alerts-zpxz5jrwzkl4pwoo', 'bus-alerts-zpxz5jrwzkl4pwoo-01', 'bus-alerts-01-hdkdhsjbd'];
   var cur = localStorage.getItem('busfollower_topic');
   if (olds.indexOf(cur) !== -1) {
-    localStorage.setItem('busfollower_topic', 'bus-alerts-01-hdkdhsjbd');
+    localStorage.setItem('busfollower_topic', 'bus-alerts-02-hdkdhsjbd');
   }
 })();
-var TOPIC = localStorage.getItem('busfollower_topic') || 'bus-alerts-01-hdkdhsjbd';
+var TOPIC = localStorage.getItem('busfollower_topic') || 'bus-alerts-02-hdkdhsjbd';
 document.getElementById('chanName').textContent = TOPIC;
 var AM_STOPS = [[1, "ON WILLIAM CUTMORE AVE AT EVEREST CRES (NORTH ENTRANCE) AT PARK"], [2, "ON FORD STRATHY CRES - OPPOSITE 1411 AT BENCHES"], [3, "ON MEADOWRIDGE DR AT WHEAT BOOM DR (N/W CORNER)"], [4, "ON JOHN MCKAY BLVD - NORTH OF ANSON GATE AT WALKWAY"], [5, "ON THRESHING MILL BLVD AT MEADOW MARSH CRES (N/E CORNER)"], [6, "ON WHEAT BOOM DR - OPPOSITE 434 WHEAT BOOM DR AT PARK"], [7, "ON POSTRIDGE DR AT FAIRGATE WAY (N/W CORNER) - TRANSIT STYLE STOP"], [8, "ON CRIMSON OAK TRAIL - BETWEEN NICHOLS & CEDAR"], [9, "ON PONDVIEW PL - OPPOSITE 495 PONDVIEW PL AT PARK SIGN"], [10, "ON CORONATION DR AT NORTH RIDGE TRAIL (S/E CORNER) AT PARK"], [11, "ON CRAIGLEITH RD - OPPOSITE SYLVIA DR AT PARK (SOUTH SIDE)"], [12, "ON CRAIGLEITH RD AT MEADOWRIDGE DR (S/W CORNER)"], [13, "SCHOOL: ST MARGUERITE D'YOUVILLE CES - 1359 BAYSHIRE DR - BUS LOADING ZONE"]];
 var PM_STOPS = [["S", 13, "SCHOOL: ST MARGUERITE D'YOUVILLE CES - 1359 BAYSHIRE DR - BUS LOADING ZONE"], ["A", 9, "ON PONDVIEW PL - OPPOSITE 495 PONDVIEW PL AT PARK SIGN"], ["B", 8, "ON CRIMSON OAK TRAIL - BETWEEN NICHOLS & CEDAR"], ["C", 10, "ON CORONATION DR AT NORTH RIDGE TRAIL (S/E CORNER) AT PARK"], ["D", 11, "ON CRAIGLEITH RD - OPPOSITE SYLVIA DR AT PARK (SOUTH SIDE)"], ["E", 12, "ON CRAIGLEITH RD AT MEADOWRIDGE DR (S/W CORNER)"], ["F", 1, "ON WILLIAM CUTMORE AVE AT EVEREST CRES (NORTH ENTRANCE) AT PARK"], ["G", 2, "ON FORD STRATHY CRES - OPPOSITE 1411 AT BENCHES"], ["H", 3, "ON MEADOWRIDGE DR AT WHEAT BOOM DR (N/W CORNER)"], ["I", 4, "ON JOHN MCKAY BLVD - NORTH OF ANSON GATE AT WALKWAY"], ["J", 5, "ON THRESHING MILL BLVD AT MEADOW MARSH CRES (N/E CORNER)"], ["K", 6, "ON WHEAT BOOM DR - OPPOSITE 434 WHEAT BOOM DR AT PARK"], ["L", 7, "ON POSTRIDGE DR AT FAIRGATE WAY (N/W CORNER) - TRANSIT STYLE STOP"]];
