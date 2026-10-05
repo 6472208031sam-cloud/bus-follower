@@ -60,7 +60,7 @@
 </head>
 <body>
 <header>
-  <h1>&#x1F68C; St Cecilia Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v1.0</span></h1>
+  <h1>&#x1F68C; St Cecilia Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v1.1</span></h1>
   <div class="seg" style="display:none;">
     <button id="btnAM" class="on">AM</button>
     <button id="btnPM">PM</button>
@@ -155,10 +155,11 @@ function recordEvent(r, s, isTest, rawMsg, isFinal, whenISO, deferUI) {
   var now = whenISO ? new Date(whenISO) : new Date();
   var key = torontoDateKey(now);
   var h = pruneHistory(loadHistory());
-  var day = h[key] || { am: [], pm: [] };
-  var arr = (r === 'AM') ? day.st : day.st;
-  var evStop = (r === 'AM') ? s.n : s.am;
-  var evLetter = (r === 'AM') ? null : s.letter;
+  var day = h[key] || { st: [] };
+  if (!day.st) day.st = [];
+  var arr = day.st;
+  var evStop = s.n;
+  var evLetter = s.letter;
   // Dedupe: skip if any event for this route+day is the same stop within 60s
   var t = now.getTime();
   for (var i = 0; i < arr.length; i++) {
@@ -184,7 +185,7 @@ function stateFromEvents(r, events) {
     st.reached[key] = true;
     var idx = -1;
     list.forEach(function (s, i) {
-      if ((r === 'AM') ? (s.n === ev.stop) : (s.letter === ev.letter)) idx = i;
+      if (s.letter === ev.letter) idx = i;
     });
     if (idx > st.busIdx) st.busIdx = idx;
     var t = new Date(ev.time);
@@ -198,17 +199,17 @@ function getDisplayState(r) {
   var h = loadHistory();
   var day = h[viewDate];
   if (!day) return { reached: {}, busIdx: -1, complete: false, lastUpdate: null };
-  return stateFromEvents(r, (r === 'AM') ? day.st : day.st);
+  return stateFromEvents(r, day.st || []);
 }
 function restoreToday() {
   var today = torontoDateKey(new Date());
   var h = loadHistory();
   var day = h[today];
   if (!day) return;
-  ['AM', 'PM'].forEach(function (r) {
-    var st = stateFromEvents(r, (r === 'AM') ? day.st : day.st);
+  ['ST'].forEach(function (r) {
+    var st = stateFromEvents(r, day.st || []);
     state[r] = st;
-    var evs = (r === 'AM') ? day.st : day.st;
+    var evs = day.st || [];
     if (evs.length) lastRoute = r;
   });
 }
@@ -227,7 +228,7 @@ L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
 var routeLine = null, pinLayer = null, busMarker = null;
 
 function pinIcon(s, cls) {
-  var label = route === 'AM' ? s.n : s.letter;
+  var label = s.letter;
   return L.divIcon({ className: '', html: '<div class="pin ' + cls + '">' + label + '</div>',
                      iconSize: [28, 28], iconAnchor: [14, 14] });
 }
@@ -596,7 +597,7 @@ function applyArrival(r, s, isTest, rawMsg, opts) {
   var added = recordEvent(r, s, isTest, rawMsg, false, opts && opts.time, opts && opts.deferUI);
   if (viewDate) return added; // history mode: accumulate silently, don't touch the display
   if (opts && opts.silent) return added; // backfill: rendering deferred to the end
-  var label = r === 'AM' ? ('Stop ' + s.n) : ('Stop ' + s.letter + ' (' + s.am + ')');
+  var label = 'Stop ' + s.letter;
   addLog((isTest ? '[TEST] ' : '') + 'Bus reached ' + label +
          (r !== route ? ' \u2014 switch to ' + r + ' to follow' : ''),
          (isTest ? 'TEST ' : '') + r, isTest ? 'test' : r.toLowerCase());
@@ -655,7 +656,7 @@ function logEntryFromEvent(r, ev) {
   var t = new Date(ev.time).toLocaleTimeString('en-CA', {
     timeZone: 'America/Toronto', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false
   });
-  var label = (r === 'AM') ? ('Stop ' + ev.stop) : ('Stop ' + ev.letter + ' (' + ev.stop + ')');
+  var label = 'Stop ' + ev.letter;
   var txt = (ev.test ? '[TEST] ' : '') + (ev.final ? 'Final stop reached' : ('Bus reached ' + label));
   var tagCls = ev.test ? 'test' : r.toLowerCase();
   d.innerHTML = '<span class="ts">' + esc(t) + '</span>' +
@@ -667,7 +668,7 @@ function renderHistoryView() {
   log.innerHTML = '';
   var h = loadHistory();
   var day = h[viewDate];
-  var events = day ? ((route === 'AM') ? (day.st || []) : (day.st || [])) : [];
+  var events = day ? (day.st || []) : [];
   if (!events.length) {
     log.innerHTML = '<div id="logEmpty">No ' + route + ' events on ' + dateLabel(viewDate) + '.</div>';
   } else {
@@ -698,7 +699,7 @@ function rebuildLiveLog() {
   var day = h[today];
   var all = [];
   if (day) {
-    (day.st || []).forEach(function (ev) { all.push({ r: 'AM', ev: ev }); });
+    (day.st || []).forEach(function (ev) { all.push({ r: 'ST', ev: ev }); });
     (day.st || []).forEach(function (ev) { all.push({ r: 'PM', ev: ev }); });
   }
   if (!all.length) {
