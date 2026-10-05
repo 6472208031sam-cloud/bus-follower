@@ -553,7 +553,7 @@ function disconnect() {
 function handleMessage(raw, opts) {
   var msg = String(raw), isTest = false;
   if (msg.indexOf(BELL + ' TEST:') === 0) { isTest = true; msg = msg.slice((BELL + ' TEST:').length).trim(); }
-  var mPM = msg.match(new RegExp('^' + BUS + ' Stop ([A-Z0]) \\((\\d+)\\):'));
+  var mPM = msg.match(new RegExp('^' + BUS + ' Stop ([A-Z0])(?: \\((\\d+)\\))?:'));
   // AM: test format "Stop 10: <name> reached." OR real app format "Stop 10 reached: <name>."
   var mAM = msg.match(new RegExp('^' + BUS + ' Stop (\\d+):'))
          || msg.match(new RegExp('^' + BUS + ' Stop (\\d+) reached:'));
