@@ -60,7 +60,7 @@
 </head>
 <body>
 <header>
-  <h1>&#x1F68C; St Cecilia Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v2.0</span></h1>
+  <h1>&#x1F68C; St Cecilia Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v2.1</span></h1>
   <div class="seg">
     <button id="btnAM" class="on">AM</button>
     <button id="btnPM">PM</button>
@@ -578,6 +578,14 @@ function handleMessage(raw, opts) {
   if (mStop) {
     var s = null;
     var label = mStop[1];
+    // Auto-detect route from label: 1-4 = AM, A-D = PM.
+    // Switch tabs if needed so the alert lands in the right place.
+    if (/^[1-4]$/.test(label)) {
+      r = 'AM';
+    } else if (/^[A-D]$/.test(label)) {
+      r = 'PM';
+    }
+    if (r !== route) setRoute(r);
     var list = routeStops(r);
     // Match by letter (AM: 1-4, PM: D,C,B,A)
     list.forEach(function (x) { if (x.letter === label) s = x; });
