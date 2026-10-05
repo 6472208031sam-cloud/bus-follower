@@ -117,16 +117,16 @@ var AM_STOPS = [
   {"n": 4, "letter": "4", "name": "St. Cecilia", "lat": 43.494925, "lng": -79.721142}
 ];
 var PM_STOPS = [
-  {"n": 1, "letter": "A", "name": "Emma house", "lat": 43.497004, "lng": -79.718877},
-  {"n": 2, "letter": "B", "name": "Natalia House", "lat": 43.496826, "lng": -79.718729},
-  {"n": 3, "letter": "C", "name": "Half way", "lat": 43.496237, "lng": -79.720459},
-  {"n": 4, "letter": "D", "name": "St. Cecilia", "lat": 43.494925, "lng": -79.721142}
+  {"n": 1, "letter": "A", "name": "St. Cecilia", "lat": 43.494925, "lng": -79.721142},
+  {"n": 2, "letter": "B", "name": "Half way", "lat": 43.496237, "lng": -79.720459},
+  {"n": 3, "letter": "C", "name": "Natalia House", "lat": 43.496826, "lng": -79.718729},
+  {"n": 4, "letter": "D", "name": "Emma house", "lat": 43.497004, "lng": -79.718877}
 ];
 function routeStops(r) { return r === 'AM' ? AM_STOPS : PM_STOPS; }
 var STOPS = AM_STOPS; // default, for code that doesn't take route
 var ST_PATH = [[43.497004,-79.718877],[43.496826,-79.718729],[43.496237,-79.720459],[43.494925,-79.721142]];
 var PM_PATH = [[43.494925,-79.721142],[43.496237,-79.720459],[43.496826,-79.718729],[43.497004,-79.718877]];
-function routePath(r) { return ST_PATH; }
+function routePath(r) { return r === 'AM' ? ST_PATH : PM_PATH; }
 
 var BUS = "\uD83D\uDE8C", BELL = "\uD83D\uDD14";
 
