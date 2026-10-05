@@ -60,7 +60,7 @@
 </head>
 <body>
 <header>
-  <h1>&#x1F68C; St Cecilia Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v1.6</span></h1>
+  <h1>&#x1F68C; St Cecilia Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v1.7</span></h1>
   <div class="seg" style="display:none;">
     <button id="btnAM" class="on">AM</button>
     <button id="btnPM">PM</button>
@@ -88,7 +88,7 @@
 <section>
   <h2>Channel</h2>
   <div class="row">
-    <input type="text" id="topicInput" placeholder="ntfy channel name" autocomplete="off" value="stcecilia-alerts-04-hdke67hang" />
+    <input type="text" id="topicInput" placeholder="ntfy channel name" autocomplete="off" value="stcecilia-alerts-05-hdke67hang" />
     <button class="act" id="connBtn">Connect</button>
     <button class="act ghost" id="refreshBtn" title="Re-check for new alerts">↻</button>
   </div>
@@ -312,10 +312,10 @@ var topicInput = document.getElementById('topicInput');
 var connBtn = document.getElementById('connBtn');
 var connDot = document.getElementById('connDot');
 // Hardcoded default channel (editable); localStorage overrides if user changed it
-var HARDCODED_TOPIC = 'stcecilia-alerts-04-hdke67hang';
+var HARDCODED_TOPIC = 'stcecilia-alerts-05-hdke67hang';
 // One-time migration: old channels -> new channel (2026-10-04)
 (function migrateTopic() {
-  var olds = ['stcecilia-alerts-355e33bfc71fdaf3', 'stcecilia-alerts-01-hdke67', 'stcecilia-alerts-02-hdke67hang', 'stcecilia-alerts-03-hdke67hang'];
+  var olds = ['stcecilia-alerts-355e33bfc71fdaf3', 'stcecilia-alerts-01-hdke67', 'stcecilia-alerts-02-hdke67hang', 'stcecilia-alerts-03-hdke67hang', 'stcecilia-alerts-04-hdke67hang'];
   var cur = localStorage.getItem('stceciliafollower_topic');
   if (olds.indexOf(cur) !== -1) {
     localStorage.setItem('stceciliafollower_topic', HARDCODED_TOPIC);
