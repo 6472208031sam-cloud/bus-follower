@@ -1,0 +1,744 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+<meta http-equiv="Pragma" content="no-cache" />
+<meta name="theme-color" content="#0b3d2e" />
+<title>St Cecilia Follower</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+  :root { --green:#0b6e4f; --green-d:#0b3d2e; --bg:#0f1a15; --card:#16241d; --txt:#eef4ef; --mut:#9db3a6; --acc:#35d07f; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:-apple-system,system-ui,Segoe UI,Roboto,sans-serif; background:var(--bg); color:var(--txt); }
+  header { display:flex; align-items:center; gap:10px; padding:10px 14px; background:var(--green-d); position:sticky; top:0; z-index:1000; }
+  header h1 { font-size:1.15rem; margin:0; flex:1; }
+  .seg { display:flex; background:#0a2b20; border-radius:999px; padding:3px; }
+  .seg button { border:0; background:transparent; color:var(--mut); font-weight:700; padding:7px 16px; border-radius:999px; cursor:pointer; }
+  .seg button.on { background:var(--green); color:#fff; }
+  #connDot { width:12px; height:12px; border-radius:50%; background:#888; flex:none; }
+  #connDot.ok { background:var(--acc); } #connDot.err { background:#ff5d5d; }
+  #map { height:52vh; min-height:320px; width:100%; }
+  .bar { padding:10px 14px; background:var(--card); border-bottom:1px solid #223129; }
+  #statusLine { font-size:1.05rem; font-weight:700; }
+  #subLine { color:var(--mut); font-size:.85rem; margin-top:2px; }
+  .prog { height:8px; background:#223129; border-radius:99px; margin-top:8px; overflow:hidden; }
+  .prog > div { height:100%; background:var(--acc); width:0%; transition:width .4s; }
+  section { padding:12px 14px; }
+  h2 { font-size:.95rem; color:var(--mut); margin:14px 0 8px; text-transform:uppercase; letter-spacing:.06em; }
+  .row { display:flex; gap:8px; margin-bottom:8px; }
+  input[type=text] { flex:1; padding:10px 12px; border-radius:8px; border:1px solid #2c4034; background:#0d1712; color:var(--txt); font-size:1rem; }
+  button.act { padding:10px 16px; border-radius:8px; border:0; background:var(--green); color:#fff; font-weight:700; font-size:.95rem; cursor:pointer; }
+  button.act.ghost { background:#223129; }
+  button.act:disabled { opacity:.5; }
+  #log { max-height:260px; overflow-y:auto; background:#0d1712; border:1px solid #223129; border-radius:8px; padding:6px 0; }
+  #log .e { padding:8px 12px; border-bottom:1px solid #182420; font-size:.88rem; }
+  #log .e:last-child { border-bottom:0; }
+  #log .ts { color:var(--mut); font-size:.75rem; margin-right:6px; }
+  #log .tag { display:inline-block; font-size:.7rem; font-weight:700; border-radius:4px; padding:1px 6px; margin-right:6px; background:#223129; color:var(--mut); }
+  #log .tag.am { background:#0b3d2e; color:var(--acc); }
+  #log .tag.pm { background:#3d2b0b; color:#ffcf5d; }
+  #log .tag.test { background:#3a3a10; color:#ffe45d; }
+  #log .tag.warn { background:#3d140b; color:#ff8d5d; }
+  #logEmpty { padding:14px; color:var(--mut); text-align:center; font-size:.9rem; }
+  details.help { background:var(--card); border-radius:8px; padding:10px 12px; font-size:.88rem; color:var(--mut); }
+  details.help summary { cursor:pointer; font-weight:700; color:var(--txt); }
+  .pin { width:28px; height:28px; border-radius:50%; background:#fff; border:2px solid var(--green); color:var(--green); display:grid; place-items:center; font-weight:800; font-size:.8rem; }
+  .pin.done { background:var(--green); color:#fff; }
+  .pin.next { box-shadow:0 0 0 4px rgba(53,208,127,.45); }
+  .busdot { width:22px; height:22px; border-radius:50%; background:#2f8bff; border:3px solid #fff; box-shadow:0 0 0 3px rgba(47,139,255,.4), 0 2px 8px rgba(0,0,0,.5); }
+  .datebar { display:flex; align-items:center; gap:8px; padding:8px 14px; background:#0d1712; border-bottom:1px solid #223129; }
+  .datebar label { color:var(--mut); font-size:.85rem; font-weight:700; }
+  #dateSelect { flex:1; padding:8px 10px; border-radius:8px; border:1px solid #2c4034; background:#16241d; color:var(--txt); font-size:.95rem; max-width:320px; }
+  #dateSummary { color:var(--mut); font-size:.82rem; }
+  #histBadge { display:none; font-size:.75rem; font-weight:700; background:#3d2b0b; color:#ffcf5d; border-radius:4px; padding:2px 8px; }
+  #histBadge.on { display:inline-block; }
+  .histnote { padding:6px 14px; color:var(--mut); font-size:.78rem; background:#0d1712; border-bottom:1px solid #223129; }
+</style>
+</head>
+<body>
+<header>
+  <h1>&#x1F68C; St Cecilia Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v1.0</span></h1>
+  <div class="seg" style="display:none;">
+    <button id="btnAM" class="on">AM</button>
+    <button id="btnPM">PM</button>
+  </div>
+  <div style="font-weight:bold;">St Cecilia Route</div>
+  <span id="connDot" title="Disconnected"></span>
+</header>
+
+<div id="map"></div>
+
+<div class="datebar">
+  <label for="dateSelect">View:</label>
+  <select id="dateSelect"><option value="live">&#x1F534; Live</option></select>
+  <span id="histBadge">HISTORY</span>
+  <span id="dateSummary"></span>
+</div>
+<div class="histnote">Shared history covers recent alerts (ntfy keeps ~12h) and is the same on every device. This device also keeps up to 1 year locally.</div>
+
+<div class="bar">
+  <div id="statusLine">No bus updates yet</div>
+  <div id="subLine">Connect to the follower channel below to start tracking.</div>
+  <div class="prog"><div id="progFill"></div></div>
+</div>
+
+<section>
+  <h2>Channel</h2>
+  <div class="row">
+    <input type="text" id="topicInput" placeholder="ntfy channel name" autocomplete="off" value="stcecilia-alerts-355e33bfc71fdaf3" />
+    <button class="act" id="connBtn">Connect</button>
+    <button class="act ghost" id="refreshBtn" title="Re-check for new alerts">↻</button>
+  </div>
+  <details class="help">
+    <summary>Where do I find the channel name?</summary>
+    <p>On the bus phone, open <b>Bus Stop Alerts</b> &gt; <b>Alerts to another phone</b> panel. The channel name is shown there &mdash; type it in above exactly and tap Connect.</p>
+  </details>
+
+  <h2>Event log</h2>
+  <div class="row">
+    <button class="act ghost" id="clearLog">Clear log</button>
+    <button class="act ghost" id="clearHistory">Clear all history</button>
+    <a class="act ghost" href="test-alerts.html" target="_blank" style="text-decoration:none;display:inline-block;text-align:center;">🔔 Test stop alerts</a>
+  </div>
+  <div id="log"><div id="logEmpty">No events yet. Arrivals posted to the channel will appear here.</div></div>
+</section>
+
+<script>
+"use strict";
+
+var STOPS = [
+  {"n": 1, "letter": "A", "name": "Emma house", "lat": 43.497004, "lng": -79.718877},
+  {"n": 2, "letter": "B", "name": "Natalia House", "lat": 43.496826, "lng": -79.718729},
+  {"n": 3, "letter": "C", "name": "Half way", "lat": 43.496237, "lng": -79.720459},
+  {"n": 4, "letter": "D", "name": "St. Cecilia", "lat": 43.494925, "lng": -79.721142}
+];
+// PM not used for St Cecilia
+var ST_PATH = [[43.497004,-79.718877],[43.496826,-79.718729],[43.496237,-79.720459],[43.494925,-79.721142]];
+
+var BUS = "\uD83D\uDE8C", BELL = "\uD83D\uDD14";
+
+/* ===== State ===== */
+var route = 'ST';
+var state = {
+  ST: { reached: {}, busIdx: -1, complete: false, lastUpdate: null }
+};
+var lastRoute = null;
+var evtSrc = null;
+
+/* ===== Persistent history (localStorage) ===== */
+var HIST_KEY = 'stceciliafollower_history';
+var viewDate = null; // null = live mode, else 'YYYY-MM-DD'
+
+function torontoDateKey(d) {
+  return d.toLocaleDateString('en-CA', { timeZone: 'America/Toronto' });
+}
+function loadHistory() {
+  try {
+    var h = JSON.parse(localStorage.getItem(HIST_KEY) || '{}');
+    return (h && typeof h === 'object') ? h : {};
+  } catch (e) { return {}; }
+}
+function saveHistory(h) {
+  try { localStorage.setItem(HIST_KEY, JSON.stringify(h)); } catch (e) {}
+}
+function pruneHistory(h) {
+  var cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - 365);
+  var cutoffKey = torontoDateKey(cutoff);
+  Object.keys(h).forEach(function (k) { if (k < cutoffKey) delete h[k]; });
+  return h;
+}
+function recordEvent(r, s, isTest, rawMsg, isFinal, whenISO, deferUI) {
+  var now = whenISO ? new Date(whenISO) : new Date();
+  var key = torontoDateKey(now);
+  var h = pruneHistory(loadHistory());
+  var day = h[key] || { am: [], pm: [] };
+  var arr = (r === 'AM') ? day.st : day.st;
+  var evStop = (r === 'AM') ? s.n : s.am;
+  var evLetter = (r === 'AM') ? null : s.letter;
+  // Dedupe: skip if any event for this route+day is the same stop within 60s
+  var t = now.getTime();
+  for (var i = 0; i < arr.length; i++) {
+    var e = arr[i];
+    if (e.stop === evStop && e.letter === evLetter &&
+        Math.abs(t - new Date(e.time).getTime()) < 60000) {
+      return false;
+    }
+  }
+  arr.push({ stop: evStop, letter: evLetter, time: now.toISOString(),
+             msg: String(rawMsg), test: !!isTest, final: !!isFinal });
+  if (arr.length > 200) arr.splice(0, arr.length - 200);
+  h[key] = day;
+  saveHistory(h);
+  if (!deferUI) refreshDatePicker();
+  return true;
+}
+function stateFromEvents(r, events) {
+  var st = { reached: {}, busIdx: -1, complete: false, lastUpdate: null };
+  var list = STOPS;
+  events.forEach(function (ev) {
+    var key = ev.letter;
+    st.reached[key] = true;
+    var idx = -1;
+    list.forEach(function (s, i) {
+      if ((r === 'AM') ? (s.n === ev.stop) : (s.letter === ev.letter)) idx = i;
+    });
+    if (idx > st.busIdx) st.busIdx = idx;
+    var t = new Date(ev.time);
+    if (!st.lastUpdate || t > st.lastUpdate) st.lastUpdate = t;
+    if (ev.final) { st.complete = true; st.busIdx = list.length - 1; }
+  });
+  return st;
+}
+function getDisplayState(r) {
+  if (!viewDate) return state[r];
+  var h = loadHistory();
+  var day = h[viewDate];
+  if (!day) return { reached: {}, busIdx: -1, complete: false, lastUpdate: null };
+  return stateFromEvents(r, (r === 'AM') ? day.st : day.st);
+}
+function restoreToday() {
+  var today = torontoDateKey(new Date());
+  var h = loadHistory();
+  var day = h[today];
+  if (!day) return;
+  ['AM', 'PM'].forEach(function (r) {
+    var st = stateFromEvents(r, (r === 'AM') ? day.st : day.st);
+    state[r] = st;
+    var evs = (r === 'AM') ? day.st : day.st;
+    if (evs.length) lastRoute = r;
+  });
+}
+
+function stops() { return STOPS; }
+function path()  { return ST_PATH; }
+function stopKey(s) { return s.letter; }
+function stopShort(s) { return 'Stop ' + s.letter; }
+function esc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+
+/* ===== Map ===== */
+var map = L.map('map');
+L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  maxZoom: 19, attribution: '&copy; OpenStreetMap'
+}).addTo(map);
+var routeLine = null, pinLayer = null, busMarker = null;
+
+function pinIcon(s, cls) {
+  var label = route === 'AM' ? s.n : s.letter;
+  return L.divIcon({ className: '', html: '<div class="pin ' + cls + '">' + label + '</div>',
+                     iconSize: [28, 28], iconAnchor: [14, 14] });
+}
+
+function renderRoute() {
+  if (routeLine) map.removeLayer(routeLine);
+  if (pinLayer) map.removeLayer(pinLayer);
+  routeLine = L.polyline(path(), { color: '#0b6e4f', weight: 4, opacity: 0.9 }).addTo(map);
+  pinLayer = L.layerGroup().addTo(map);
+  var st = getDisplayState(route), list = stops();
+  list.forEach(function (s, i) {
+    var cls = st.reached[stopKey(s)] ? 'done' : (i === st.busIdx + 1 && !st.complete ? 'next' : '');
+    L.marker([s.lat, s.lng], { icon: pinIcon(s, cls) })
+      .bindPopup('<b>' + stopShort(s) + '</b><br>' + esc(s.name))
+      .addTo(pinLayer);
+  });
+  if (busMarker) { map.removeLayer(busMarker); busMarker = null; }
+  if (st.busIdx >= 0 && st.busIdx < list.length) {
+    var b = list[st.busIdx];
+    busMarker = L.marker([b.lat, b.lng], {
+      icon: L.divIcon({ className: '', html: '<div class="busdot"></div>', iconSize: [22, 22], iconAnchor: [11, 11] }),
+      zIndexOffset: 1000
+    }).addTo(map).bindPopup('<b>Bus here</b><br>' + esc(stopShort(b)));
+  }
+  if (!renderRoute._fit || renderRoute._r !== route) {
+    map.fitBounds(routeLine.getBounds(), { padding: [24, 24] });
+    renderRoute._fit = true; renderRoute._r = route;
+  }
+  renderStatus();
+}
+
+function renderStatus() {
+  var st = getDisplayState(route), list = stops();
+  var line = document.getElementById('statusLine'), sub = document.getElementById('subLine');
+  var done = Object.keys(st.reached).length;
+  document.getElementById('progFill').style.width = (100 * done / list.length) + '%';
+  if (st.complete) {
+    line.textContent = 'Route complete \u2014 bus reached the final stop';
+    sub.textContent = st.lastUpdate ? ('Last update: ' + st.lastUpdate.toLocaleTimeString()) : '';
+  } else if (st.busIdx >= 0) {
+    var s = list[st.busIdx];
+    line.textContent = 'Bus at ' + stopShort(s) + ' of ' + list.length;
+    sub.textContent = (route === 'AM' && s.t ? s.t + ' \u00B7 ' : '') +
+      'Last update: ' + (st.lastUpdate ? st.lastUpdate.toLocaleTimeString() : '\u2014');
+  } else {
+    line.textContent = 'No bus updates yet';
+    sub.textContent = st.lastUpdate ? ('Last update: ' + st.lastUpdate.toLocaleTimeString())
+                                    : 'Connect to the follower channel below to start tracking.';
+  }
+}
+
+/* ===== Event log ===== */
+function addLog(text, tag, tagCls) {
+  var empty = document.getElementById('logEmpty');
+  if (empty) empty.remove();
+  var log = document.getElementById('log');
+  var d = document.createElement('div');
+  d.className = 'e';
+  d.innerHTML = '<span class="ts">' + new Date().toLocaleTimeString() + '</span>' +
+    (tag ? '<span class="tag ' + tagCls + '">' + esc(tag) + '</span>' : '') + esc(text);
+  log.insertBefore(d, log.firstChild);
+  while (log.children.length > 200) log.removeChild(log.lastChild);
+}
+document.getElementById('clearLog').addEventListener('click', function () {
+  document.getElementById('log').innerHTML = '<div id="logEmpty">Log cleared.</div>';
+});
+
+/* ===== AM/PM toggle ===== */
+document.getElementById('btnAM').addEventListener('click', function () { setRoute('AM'); });
+document.getElementById('btnPM').addEventListener('click', function () { setRoute('PM'); });
+function setRoute(r) {
+  if (route === r) return;
+  route = r;
+  document.getElementById('btnAM').classList.toggle('on', r === 'AM');
+  document.getElementById('btnPM').classList.toggle('on', r === 'PM');
+  renderRoute();
+}
+
+/* ===== ntfy via SSE ===== */
+var topicInput = document.getElementById('topicInput');
+var connBtn = document.getElementById('connBtn');
+var connDot = document.getElementById('connDot');
+// Hardcoded default channel (editable); localStorage overrides if user changed it
+var HARDCODED_TOPIC = 'stcecilia-alerts-355e33bfc71fdaf3';
+// One-time migration: old channels -> new channel (2026-10-04)
+(function migrateTopic() {
+  var olds = [];
+  var cur = localStorage.getItem('stceciliafollower_topic');
+  if (olds.indexOf(cur) !== -1) {
+    localStorage.setItem('stceciliafollower_topic', HARDCODED_TOPIC);
+  }
+})();
+topicInput.value = localStorage.getItem('stceciliafollower_topic') || HARDCODED_TOPIC;
+connBtn.addEventListener('click', function () { evtSrc ? disconnect() : connect(); });
+topicInput.addEventListener('keydown', function (e) { if (e.key === 'Enter' && !evtSrc) connect(); });
+// Manual refresh button: re-backfill shared history
+document.getElementById('refreshBtn').addEventListener('click', function () {
+  var topic = topicInput.value.trim();
+  if (!topic) return;
+  addLog('Checking for new alerts…', 'SYNC', '');
+  backfillFromNtfy(topic).then(function (msgs) {
+    var n = 0;
+    msgs.forEach(function (m) {
+      var iso = new Date(m.time * 1000).toISOString();
+      if (handleMessage(m.message, { time: iso, silent: true, deferUI: true })) n++;
+    });
+    refreshDatePicker();
+    if (!viewDate) { rebuildLiveLog(); renderRoute(); }
+    addLog(n > 0 ? ('Found ' + n + ' new alert' + (n === 1 ? '' : 's') + '.') : 'No new alerts.', 'SYNC', '');
+  }).catch(function (e) {
+    addLog('Refresh failed: ' + (e && e.message ? e.message : e), 'SYNC', 'warn');
+  });
+});
+// Auto-connect on load if a topic is saved
+if (topicInput.value.trim()) {
+  setTimeout(function () { connect(); }, 500);
+}
+// Re-backfill when tab becomes visible again (mobile browsers suspend SSE in background tabs)
+document.addEventListener('visibilitychange', function () {
+  if (!document.hidden && topicInput.value.trim() && evtSrc) {
+    // Tab is visible again: refresh shared history to catch anything missed while suspended
+    backfillFromNtfy(topicInput.value.trim()).then(function (msgs) {
+      var n = 0;
+      msgs.forEach(function (m) {
+        var iso = new Date(m.time * 1000).toISOString();
+        if (handleMessage(m.message, { time: iso, silent: true, deferUI: true })) n++;
+      });
+      if (n > 0) {
+        refreshDatePicker();
+        if (!viewDate) { rebuildLiveLog(); renderRoute(); }
+        addLog('Caught up: ' + n + ' new alert' + (n === 1 ? '' : 's') + ' while away.', 'SYNC', '');
+      }
+    }).catch(function () {});
+  }
+});
+
+function setConn(on, err) {
+  connDot.className = on ? 'ok' : (err ? 'err' : '');
+  connDot.title = on ? 'Connected' : (err ? 'Error' : 'Disconnected');
+  connBtn.textContent = on ? 'Disconnect' : 'Connect';
+}
+/* Backfill recent messages from ntfy's server-side cache so every device
+   sees the same shared history (localStorage alone is per-device). */
+// Global error catcher: log JS errors to the event log for debugging
+window.onerror = function (msg, src, line) {
+  try {
+    addLog('JS Error: ' + msg + ' (line ' + line + ')', 'ERROR', 'warn');
+  } catch (e) {}
+};
+function fetchWithTimeout(url, ms) {
+  var ctrl = null, timer = null;
+  try {
+    if (typeof AbortController !== 'undefined') {
+      ctrl = new AbortController();
+      timer = setTimeout(function () { try { ctrl.abort(); } catch (e) {} }, ms || 10000);
+    }
+  } catch (e) {}
+  var opts = ctrl ? { signal: ctrl.signal } : undefined;
+  return fetch(url, opts).then(function (resp) {
+    if (timer) clearTimeout(timer);
+    return resp;
+  }, function (err) {
+    if (timer) clearTimeout(timer);
+    throw err;
+  });
+}
+function backfillFromNtfy(topic) {
+  var directUrl = 'https://ntfy.sh/' + encodeURIComponent(topic) + '/json?since=24h';
+  var htmlUrl = 'https://ntfy.sh/' + encodeURIComponent(topic);
+  function parseHtmlMessages(html) {
+    var found = [];
+    var re = /🔔 TEST: 🚌 Stop [^<]{1,200}? reached\.|🚌 Stop [^<]{1,200}? reached\.|🚌 Final stop reached:[^<]{1,200}?\./g;
+    var m, now = Math.floor(Date.now() / 1000);
+    while ((m = re.exec(html)) !== null) {
+      var txt = m[0].replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>');
+      found.push({ event: 'message', message: txt, time: now });
+      now--;
+    }
+    return found.map(function (f) { return JSON.stringify(f); }).join('\n');
+  }
+  function fetchHtmlDirect() {
+    return fetchWithTimeout(htmlUrl, 10000).then(function (resp) {
+      if (!resp.ok) throw new Error('HTTP ' + resp.status);
+      return resp.text();
+    }).then(function (html) {
+      addLog('HTML page fetched: ' + html.length + ' chars', 'DEBUG', '');
+      return parseHtmlMessages(html);
+    });
+  }
+  function fetchHtmlViaProxy() {
+    var htmlProxy = 'https://api.allorigins.win/raw?url=' + encodeURIComponent(htmlUrl);
+    return fetchWithTimeout(htmlProxy, 12000).then(function (resp) {
+      if (!resp.ok) throw new Error('HTTP ' + resp.status);
+      return resp.text();
+    }).then(parseHtmlMessages);
+  }
+  function fetchDirectJson() {
+    return fetchWithTimeout(directUrl, 8000).then(function (resp) {
+      if (!resp.ok) throw new Error('HTTP ' + resp.status);
+      return resp.text();
+    }).then(function (text) {
+      addLog('JSON API returned: ' + text.length + ' chars', 'DEBUG', '');
+      return text;
+    });
+  }
+  function fetchProxyJson() {
+    var proxyUrl = 'https://api.allorigins.win/raw?url=' + encodeURIComponent(directUrl);
+    return fetchWithTimeout(proxyUrl, 12000).then(function (resp2) {
+      if (!resp2.ok) throw new Error('HTTP ' + resp2.status);
+      return resp2.text();
+    });
+  }
+  // Order: HTML direct -> HTML via proxy -> direct JSON -> JSON via proxy
+  return fetchHtmlDirect().catch(function () {
+    return fetchHtmlViaProxy();
+  }).catch(function () {
+    return fetchDirectJson();
+  }).catch(function () {
+    return fetchProxyJson();
+  })
+    .then(function (text) {
+      var msgs = [];
+      text.split('\n').forEach(function (line) {
+        line = line.trim();
+        if (!line) return;
+        try {
+          var o = JSON.parse(line);
+          if (o && o.event === 'message' && o.message && o.time) msgs.push(o);
+        } catch (e) {}
+      });
+      // API returns newest first; process oldest first
+      msgs.sort(function (a, b) { return a.time - b.time; });
+      // Only keep today's messages (Toronto date) — user wants same-day only on refresh
+      var todayKey = torontoDateKey(new Date());
+      msgs = msgs.filter(function (m) {
+        return torontoDateKey(new Date(m.time * 1000)) === todayKey;
+      });
+      return msgs;
+    });
+}
+function connect() {
+  var topic = topicInput.value.trim();
+  if (!topic) { addLog('Enter a channel name first.', null, ''); return; }
+  localStorage.setItem('stceciliafollower_topic', topic);
+  disconnect();
+  connBtn.disabled = true;
+  setConn(false, false);
+  connDot.title = 'Loading history…';
+  // Safety: force-re-enable button after 15s no matter what
+  var safetyTimer = setTimeout(function () {
+    connBtn.disabled = false;
+    if (!evtSrc) {
+      addLog('Connection timed out — tap Connect to retry.', 'ERROR', 'warn');
+      setConn(false, true);
+    }
+  }, 15000);
+  function done() {
+    clearTimeout(safetyTimer);
+    connBtn.disabled = false;
+  }
+  try {
+    // SSE with ?since=24h loads today's history then streams live updates.
+    // No separate backfill fetch needed.
+    startSSE(topic);
+    startPolling(topic);
+    done();
+  } catch (e) {
+    done();
+    addLog('Connect failed: ' + e.message, 'ERROR', 'warn');
+    setConn(false, true);
+  }
+}
+// Polling fallback: re-backfill every 20s so new devices stay in sync even if SSE drops
+var pollTimer = null;
+function startPolling(topic) {
+  // Disabled: SSE with ?since=24h already loads history + live updates.
+  // Kept as a stub in case we need a fallback later.
+  stopPolling();
+}
+function stopPolling() {
+  if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+}
+function startSSE(topic) {
+  try {
+    evtSrc = new EventSource('https://ntfy.sh/' + encodeURIComponent(topic) + '/sse?since=24h');
+  // ?since=24h pulls recent history first, then live updates on the same stream.
+  // handleMessage buckets by Toronto date, so only today's show in the live view.
+  var histCount = 0, histDone = false;
+  setTimeout(function () {
+    if (!histDone) {
+      histDone = true;
+      if (histCount > 0) addLog('Loaded ' + histCount + ' past alert' + (histCount === 1 ? '' : 's') + ' from today.', 'HIST', '');
+    }
+  }, 3000);
+  } catch (e) {
+    addLog('Could not open connection: ' + e.message, 'ERROR', 'warn');
+    setConn(false, true);
+    return;
+  }
+  evtSrc.onopen = function () {
+    setConn(true, false);
+    addLog('Connected to channel "' + topic + '". Waiting for bus updates\u2026', null, '');
+  };
+  evtSrc.onerror = function () {
+    setConn(false, true);
+    addLog('Connection error \u2014 retrying\u2026', 'ERROR', 'warn');
+  };
+  evtSrc.onmessage = function (ev) {
+    try {
+      var data = JSON.parse(ev.data);
+      if (data.event === 'message' && data.message) {
+        var msgDate = data.time ? torontoDateKey(new Date(data.time * 1000)) : torontoDateKey(new Date());
+        if (!histDone && msgDate === torontoDateKey(new Date())) histCount++;
+        var o = data.time ? { time: new Date(data.time * 1000).toISOString() } : undefined;
+        handleMessage(data.message, o);
+      }
+    } catch (e) { /* keepalive */ }
+  };
+}
+function disconnect() {
+  if (evtSrc) { try { evtSrc.close(); } catch (e) {} evtSrc = null; }
+  stopPolling();
+  setConn(false, false);
+}
+
+/* ===== Message parsing ===== */
+function handleMessage(raw, opts) {
+  var msg = String(raw), isTest = false;
+  if (msg.indexOf(BELL + ' TEST:') === 0) { isTest = true; msg = msg.slice((BELL + ' TEST:').length).trim(); }
+  // St Cecilia: "🚌 Stop A reached: <name>." or "🚌 Final stop reached: <name>."
+  var mStop = msg.match(new RegExp('^' + BUS + ' Stop ([A-D]) reached:'));
+  var mFinal = msg.indexOf(BUS + ' Final stop reached:') === 0;
+  var silent = !!(opts && opts.silent);
+  var r = 'ST';
+  if (mStop) {
+    var s = null;
+    STOPS.forEach(function (x) { if (x.letter === mStop[1]) s = x; });
+    if (!s) { if (!silent) addLog('Unrecognized stop letter "' + mStop[1] + '": ' + raw, 'ST?', 'warn'); return false; }
+    return applyArrival(r, s, isTest, raw, opts);
+  } else if (mFinal) {
+    var st = state[r], list = STOPS;
+    var whenF = (opts && opts.time) ? new Date(opts.time) : new Date();
+    st.complete = true; st.busIdx = list.length - 1; st.lastUpdate = whenF;
+    lastRoute = r;
+    var addedF = recordEvent(r, list[list.length - 1], isTest, raw, true,
+                             opts && opts.time, opts && opts.deferUI);
+    if (viewDate || silent) return addedF;
+    addLog((isTest ? '[TEST] ' : '') + 'Final stop reached. Route complete.',
+           (isTest ? 'TEST ' : '') + r, 'test');
+    renderRoute();
+    return addedF;
+  } else {
+    if (!silent) addLog('Unrecognized message: ' + raw, '???', 'warn');
+    return false;
+  }
+}
+
+function applyArrival(r, s, isTest, rawMsg, opts) {
+  var st = state[r], list = STOPS;
+  var key = s.letter;
+  st.reached[key] = true;
+  var idx = list.indexOf(s);
+  if (idx > st.busIdx) st.busIdx = idx;
+  st.lastUpdate = (opts && opts.time) ? new Date(opts.time) : new Date();
+  lastRoute = r;
+  var added = recordEvent(r, s, isTest, rawMsg, false, opts && opts.time, opts && opts.deferUI);
+  if (viewDate) return added; // history mode: accumulate silently, don't touch the display
+  if (opts && opts.silent) return added; // backfill: rendering deferred to the end
+  var label = r === 'AM' ? ('Stop ' + s.n) : ('Stop ' + s.letter + ' (' + s.am + ')');
+  addLog((isTest ? '[TEST] ' : '') + 'Bus reached ' + label +
+         (r !== route ? ' \u2014 switch to ' + r + ' to follow' : ''),
+         (isTest ? 'TEST ' : '') + r, isTest ? 'test' : r.toLowerCase());
+  if (r === route) renderRoute();
+  return added;
+}
+
+  /* ===== Date picker & history view ===== */
+function dateLabel(key) {
+  var today = torontoDateKey(new Date());
+  var yest = torontoDateKey(new Date(Date.now() - 86400000));
+  if (key === today) return 'Today';
+  if (key === yest) return 'Yesterday';
+  var d = new Date(key + 'T12:00:00');
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'America/Toronto' });
+}
+function refreshDatePicker() {
+  var sel = document.getElementById('dateSelect');
+  var cur = sel.value;
+  var h = loadHistory();
+  var keys = Object.keys(h).sort().reverse();
+  // Rebuild options (keep Live at top)
+  sel.innerHTML = '<option value="live">\uD83D\uDD34 Live</option>';
+  keys.forEach(function (k) {
+    var day = h[k];
+    var amN = (day.st || []).length, pmN = (day.st || []).length;
+    var opt = document.createElement('option');
+    opt.value = k;
+    opt.textContent = dateLabel(k) + ' (AM ' + amN + ' \u00B7 PM ' + pmN + ')';
+    sel.appendChild(opt);
+  });
+  // Restore selection if it still exists
+  if (cur && (cur === 'live' || h[cur])) sel.value = cur;
+  else if (viewDate && !h[viewDate]) { viewDate = null; sel.value = 'live'; }
+  updateDateSummary();
+}
+function updateDateSummary() {
+  var el = document.getElementById('dateSummary');
+  var badge = document.getElementById('histBadge');
+  if (!viewDate) {
+    el.textContent = '';
+    badge.classList.remove('on');
+    return;
+  }
+  badge.classList.add('on');
+  var h = loadHistory();
+  var day = h[viewDate];
+  if (!day) { el.textContent = 'No data for this date.'; return; }
+  var amN = (day.st || []).length, pmN = (day.st || []).length;
+  el.textContent = dateLabel(viewDate) + ' \u2014 AM: ' + amN + ' stop' + (amN === 1 ? '' : 's') +
+                   ' \u00B7 PM: ' + pmN + ' stop' + (pmN === 1 ? '' : 's');
+}
+function logEntryFromEvent(r, ev) {
+  var d = document.createElement('div');
+  d.className = 'e';
+  var t = new Date(ev.time).toLocaleTimeString('en-CA', {
+    timeZone: 'America/Toronto', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false
+  });
+  var label = (r === 'AM') ? ('Stop ' + ev.stop) : ('Stop ' + ev.letter + ' (' + ev.stop + ')');
+  var txt = (ev.test ? '[TEST] ' : '') + (ev.final ? 'Final stop reached' : ('Bus reached ' + label));
+  var tagCls = ev.test ? 'test' : r.toLowerCase();
+  d.innerHTML = '<span class="ts">' + esc(t) + '</span>' +
+    '<span class="tag ' + tagCls + '">' + esc((ev.test ? 'TEST ' : '') + r) + '</span>' + esc(txt);
+  return d;
+}
+function renderHistoryView() {
+  var log = document.getElementById('log');
+  log.innerHTML = '';
+  var h = loadHistory();
+  var day = h[viewDate];
+  var events = day ? ((route === 'AM') ? (day.st || []) : (day.st || [])) : [];
+  if (!events.length) {
+    log.innerHTML = '<div id="logEmpty">No ' + route + ' events on ' + dateLabel(viewDate) + '.</div>';
+  } else {
+    var rev = events.slice().reverse();
+    rev.forEach(function (ev) { log.appendChild(logEntryFromEvent(route, ev)); });
+  }
+  updateDateSummary();
+  renderRoute();
+}
+document.getElementById('dateSelect').addEventListener('change', function () {
+  var v = this.value;
+  if (v === 'live') {
+    viewDate = null;
+    // Rebuild live log from today's accumulated history
+    rebuildLiveLog();
+    renderRoute();
+  } else {
+    viewDate = v;
+    renderHistoryView();
+  }
+  updateDateSummary();
+});
+function rebuildLiveLog() {
+  var log = document.getElementById('log');
+  log.innerHTML = '';
+  var today = torontoDateKey(new Date());
+  var h = loadHistory();
+  var day = h[today];
+  var all = [];
+  if (day) {
+    (day.st || []).forEach(function (ev) { all.push({ r: 'AM', ev: ev }); });
+    (day.st || []).forEach(function (ev) { all.push({ r: 'PM', ev: ev }); });
+  }
+  if (!all.length) {
+    log.innerHTML = '<div id="logEmpty">No events yet. Arrivals posted to the channel will appear here.</div>';
+    return;
+  }
+  all.sort(function (a, b) { return new Date(b.ev.time) - new Date(a.ev.time); });
+  all.forEach(function (item) { log.appendChild(logEntryFromEvent(item.r, item.ev)); });
+}
+// AM/PM toggle must re-render history log when in history mode
+var _origSetRoute = setRoute;
+setRoute = function (r) {
+  _origSetRoute(r);
+  if (viewDate) renderHistoryView();
+};
+document.getElementById('clearHistory').addEventListener('click', function () {
+  if (!confirm('Delete ALL stored ride history (up to 1 year)? This cannot be undone.')) return;
+  try { localStorage.removeItem(HIST_KEY); } catch (e) {}
+  // Reset live state too
+  state = {
+    AM: { reached: {}, busIdx: -1, complete: false, lastUpdate: null },
+    PM: { reached: {}, busIdx: -1, complete: false, lastUpdate: null }
+  };
+  viewDate = null;
+  document.getElementById('dateSelect').value = 'live';
+  refreshDatePicker();
+  rebuildLiveLog();
+  renderRoute();
+  addLog('All history cleared.', null, '');
+});
+/* ===== Init: restore history ===== */
+(function () {
+  var h = pruneHistory(loadHistory());
+  saveHistory(h);
+  restoreToday();
+  refreshDatePicker();
+  rebuildLiveLog();
+})();
+
+renderRoute();
+</script>
+</body>
+</html>
