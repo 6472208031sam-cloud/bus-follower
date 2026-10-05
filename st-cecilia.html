@@ -572,7 +572,9 @@ function handleMessage(raw, opts) {
   if (msg.indexOf(BELL + ' TEST:') === 0) { isTest = true; msg = msg.slice((BELL + ' TEST:').length).trim(); }
   // St Cecilia AM: "🚌 Stop 1: <name> reached." PM: "🚌 Stop D: <name> reached."
   var mStop = msg.match(new RegExp('^' + BUS + ' Stop ([1-4A-D]):'));
-  var mFinal = msg.indexOf(BUS + ' Final stop reached:') === 0;
+  var mFinal = msg.indexOf(BUS + ' Final stop reached:') === 0 ||
+               msg.indexOf(BUS + ' Final stop reached (AM):') === 0 ||
+               msg.indexOf(BUS + ' Final stop reached (PM):') === 0;
   var silent = !!(opts && opts.silent);
   var r = route;
   if (mStop) {
@@ -592,6 +594,10 @@ function handleMessage(raw, opts) {
     if (!s) { if (!silent) addLog('Unrecognized stop letter "' + mStop[1] + '": ' + raw, 'ST?', 'warn'); return false; }
     return applyArrival(r, s, isTest, raw, opts);
   } else if (mFinal) {
+    // Auto-detect route from (AM)/(PM) tag in final message
+    if (msg.indexOf('(AM):') !== -1) r = 'AM';
+    else if (msg.indexOf('(PM):') !== -1) r = 'PM';
+    if (r !== route) setRoute(r);
     var st = state[r], list = routeStops(r);
     var whenF = (opts && opts.time) ? new Date(opts.time) : new Date();
     st.complete = true; st.busIdx = list.length - 1; st.lastUpdate = whenF;
