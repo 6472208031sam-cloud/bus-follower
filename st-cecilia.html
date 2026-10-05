@@ -60,7 +60,7 @@
 </head>
 <body>
 <header>
-  <h1>&#x1F68C; St Cecilia Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v1.7</span></h1>
+  <h1>&#x1F68C; St Cecilia Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v1.8</span></h1>
   <div class="seg" style="display:none;">
     <button id="btnAM" class="on">AM</button>
     <button id="btnPM">PM</button>
@@ -121,9 +121,10 @@ var ST_PATH = [[43.497004,-79.718877],[43.496826,-79.718729],[43.496237,-79.7204
 var BUS = "\uD83D\uDE8C", BELL = "\uD83D\uDD14";
 
 /* ===== State ===== */
-var route = 'ST';
+var route = 'AM';
 var state = {
-  ST: { reached: {}, busIdx: -1, complete: false, lastUpdate: null }
+  AM: { reached: {}, busIdx: -1, complete: false, lastUpdate: null },
+  PM: { reached: {}, busIdx: -1, complete: false, lastUpdate: null }
 };
 var lastRoute = null;
 var evtSrc = null;
@@ -155,9 +156,10 @@ function recordEvent(r, s, isTest, rawMsg, isFinal, whenISO, deferUI) {
   var now = whenISO ? new Date(whenISO) : new Date();
   var key = torontoDateKey(now);
   var h = pruneHistory(loadHistory());
-  var day = h[key] || { st: [] };
-  if (!day.st) day.st = [];
-  var arr = day.st;
+  var day = h[key] || { am: [], pm: [] };
+  if (!day.am) day.am = [];
+  if (!day.pm) day.pm = [];
+  var arr = (r === 'AM') ? day.am : day.pm;
   var evStop = s.n;
   var evLetter = s.letter;
   // Dedupe: skip if any event for this route+day is the same stop within 60s
@@ -199,17 +201,17 @@ function getDisplayState(r) {
   var h = loadHistory();
   var day = h[viewDate];
   if (!day) return { reached: {}, busIdx: -1, complete: false, lastUpdate: null };
-  return stateFromEvents(r, day.st || []);
+  return stateFromEvents(r, (r === 'AM' ? day.am : day.pm) || []);
 }
 function restoreToday() {
   var today = torontoDateKey(new Date());
   var h = loadHistory();
   var day = h[today];
   if (!day) return;
-  ['ST'].forEach(function (r) {
-    var st = stateFromEvents(r, day.st || []);
+  ['AM', 'PM'].forEach(function (r) {
+    var st = stateFromEvents(r, (r === 'AM' ? day.am : day.pm) || []);
     state[r] = st;
-    var evs = day.st || [];
+    var evs = (r === 'AM' ? day.am : day.pm) || [];
     if (evs.length) lastRoute = r;
   });
 }
@@ -562,7 +564,7 @@ function handleMessage(raw, opts) {
   var mStop = msg.match(new RegExp('^' + BUS + ' Stop ([A-D]):'));
   var mFinal = msg.indexOf(BUS + ' Final stop reached:') === 0;
   var silent = !!(opts && opts.silent);
-  var r = 'ST';
+  var r = route;
   if (mStop) {
     var s = null;
     STOPS.forEach(function (x) { if (x.letter === mStop[1]) s = x; });
@@ -668,7 +670,7 @@ function renderHistoryView() {
   log.innerHTML = '';
   var h = loadHistory();
   var day = h[viewDate];
-  var events = day ? (day.st || []) : [];
+  var events = day ? ((route === 'AM' ? day.am : day.pm) || []) : [];
   if (!events.length) {
     log.innerHTML = '<div id="logEmpty">No ' + route + ' events on ' + dateLabel(viewDate) + '.</div>';
   } else {
@@ -699,7 +701,8 @@ function rebuildLiveLog() {
   var day = h[today];
   var all = [];
   if (day) {
-    (day.st || []).forEach(function (ev) { all.push({ r: 'ST', ev: ev }); });
+    (day.am || []).forEach(function (ev) { all.push({ r: 'AM', ev: ev }); });
+    (day.pm || []).forEach(function (ev) { all.push({ r: 'PM', ev: ev }); });
     (day.st || []).forEach(function (ev) { all.push({ r: 'PM', ev: ev }); });
   }
   if (!all.length) {
