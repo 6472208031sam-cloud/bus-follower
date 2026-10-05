@@ -19,7 +19,7 @@
 </style>
 </head>
 <body>
-<h1>ntfy Alert Test <span style="font-size:0.6em;opacity:0.7;font-weight:normal;">v2.1</span></h1>
+<h1>ntfy Alert Test <span style="font-size:0.6em;opacity:0.7;font-weight:normal;">v2.2</span></h1>
 <p style="font-size:0.9rem;opacity:0.85;">Channel: <code id="chanName" style="background:#222;padding:0.15rem 0.5rem;border-radius:4px;user-select:all;"></code></p>
 <p>Sends <strong>TEST</strong> alerts to the channel saved in the Bus Follower page.</p>
 
@@ -51,12 +51,18 @@
 <h2>Individual stops — PM</h2>
 <div id="pmList"></div>
 
-<h2>Individual stops — St Cecilia</h2>
+<h2>Individual stops — St Cecilia AM</h2>
 <p style="font-size:0.85rem;opacity:0.8;">Channel: <code>stcecilia-alerts-05-hdke67hang</code></p>
 <div class="row" style="margin-bottom:0.5rem;">
-  <button id="stBtn" onclick="runST()">Send All St Cecilia</button>
+  <button onclick="runSTAM()">Send All St Cecilia AM</button>
 </div>
-<div id="stList"></div>
+<div id="stAMList"></div>
+
+<h2>Individual stops — St Cecilia PM</h2>
+<div class="row" style="margin-bottom:0.5rem;">
+  <button onclick="runSTPM()">Send All St Cecilia PM</button>
+</div>
+<div id="stPMList"></div>
 
 <h2>Log</h2>
 <div id="log"></div>
@@ -75,7 +81,8 @@ document.getElementById('chanName').textContent = TOPIC;
 var AM_STOPS = [[1, "ON WILLIAM CUTMORE AVE AT EVEREST CRES (NORTH ENTRANCE) AT PARK"], [2, "ON FORD STRATHY CRES - OPPOSITE 1411 AT BENCHES"], [3, "ON MEADOWRIDGE DR AT WHEAT BOOM DR (N/W CORNER)"], [4, "ON JOHN MCKAY BLVD - NORTH OF ANSON GATE AT WALKWAY"], [5, "ON THRESHING MILL BLVD AT MEADOW MARSH CRES (N/E CORNER)"], [6, "ON WHEAT BOOM DR - OPPOSITE 434 WHEAT BOOM DR AT PARK"], [7, "ON POSTRIDGE DR AT FAIRGATE WAY (N/W CORNER) - TRANSIT STYLE STOP"], [8, "ON CRIMSON OAK TRAIL - BETWEEN NICHOLS & CEDAR"], [9, "ON PONDVIEW PL - OPPOSITE 495 PONDVIEW PL AT PARK SIGN"], [10, "ON CORONATION DR AT NORTH RIDGE TRAIL (S/E CORNER) AT PARK"], [11, "ON CRAIGLEITH RD - OPPOSITE SYLVIA DR AT PARK (SOUTH SIDE)"], [12, "ON CRAIGLEITH RD AT MEADOWRIDGE DR (S/W CORNER)"], [13, "SCHOOL: ST MARGUERITE D'YOUVILLE CES - 1359 BAYSHIRE DR - BUS LOADING ZONE"]];
 var PM_STOPS = [["S", 13, "SCHOOL: ST MARGUERITE D'YOUVILLE CES - 1359 BAYSHIRE DR - BUS LOADING ZONE"], ["A", 9, "ON PONDVIEW PL - OPPOSITE 495 PONDVIEW PL AT PARK SIGN"], ["B", 8, "ON CRIMSON OAK TRAIL - BETWEEN NICHOLS & CEDAR"], ["C", 10, "ON CORONATION DR AT NORTH RIDGE TRAIL (S/E CORNER) AT PARK"], ["D", 11, "ON CRAIGLEITH RD - OPPOSITE SYLVIA DR AT PARK (SOUTH SIDE)"], ["E", 12, "ON CRAIGLEITH RD AT MEADOWRIDGE DR (S/W CORNER)"], ["F", 1, "ON WILLIAM CUTMORE AVE AT EVEREST CRES (NORTH ENTRANCE) AT PARK"], ["G", 2, "ON FORD STRATHY CRES - OPPOSITE 1411 AT BENCHES"], ["H", 3, "ON MEADOWRIDGE DR AT WHEAT BOOM DR (N/W CORNER)"], ["I", 4, "ON JOHN MCKAY BLVD - NORTH OF ANSON GATE AT WALKWAY"], ["J", 5, "ON THRESHING MILL BLVD AT MEADOW MARSH CRES (N/E CORNER)"], ["K", 6, "ON WHEAT BOOM DR - OPPOSITE 434 WHEAT BOOM DR AT PARK"], ["L", 7, "ON POSTRIDGE DR AT FAIRGATE WAY (N/W CORNER) - TRANSIT STYLE STOP"]];
 var ST_TOPIC = 'stcecilia-alerts-05-hdke67hang';
-var ST_STOPS = [["A", "Emma house"], ["B", "Natalia House"], ["C", "Half way"], ["D", "St. Cecilia"]];
+var ST_AM_STOPS = [["1", "Emma house"], ["2", "Natalia House"], ["3", "Half way"], ["4", "St. Cecilia"]];
+var ST_PM_STOPS = [["D", "Emma house"], ["C", "Natalia House"], ["B", "Half way"], ["A", "St. Cecilia"]];
 
 function log(msg, cls) {
   var d = document.createElement('div');
@@ -117,15 +124,26 @@ async function sendOneTo(topic, label, msg) {
   log((ok ? '✓ ' : '✗ ') + label, ok ? 'ok' : 'err');
   return ok;
 }
-async function runST() {
+async function runSTAM() {
   setBusy(true);
-  log('--- St Cecilia stops ---');
-  for (var i = 0; i < ST_STOPS.length; i++) {
-    var s = ST_STOPS[i];
-    await sendOneTo(ST_TOPIC, 'ST Stop ' + s[0], stMsg(s));
+  log('--- St Cecilia AM stops ---');
+  for (var i = 0; i < ST_AM_STOPS.length; i++) {
+    var s = ST_AM_STOPS[i];
+    await sendOneTo(ST_TOPIC, 'ST AM Stop ' + s[0], stMsg(s));
     await sleep(1000);
   }
-  log('St Cecilia done.');
+  log('St Cecilia AM done.');
+  setBusy(false);
+}
+async function runSTPM() {
+  setBusy(true);
+  log('--- St Cecilia PM stops ---');
+  for (var i = 0; i < ST_PM_STOPS.length; i++) {
+    var s = ST_PM_STOPS[i];
+    await sendOneTo(ST_TOPIC, 'ST PM Stop ' + s[0], stMsg(s));
+    await sleep(1000);
+  }
+  log('St Cecilia PM done.');
   setBusy(false);
 }
 
@@ -191,15 +209,27 @@ async function runAll() {
     amList.appendChild(b);
   });
   var stList = document.getElementById('stList');
-  ST_STOPS.forEach(function (s) {
+  var stAMList = document.getElementById('stAMList');
+  ST_AM_STOPS.forEach(function (s) {
     var b = document.createElement('button');
     b.className = 'small';
     b.textContent = 'Stop ' + s[0] + ' — ' + s[1];
     b.onclick = function () {
       b.disabled = true;
-      sendOneTo(ST_TOPIC, 'ST Stop ' + s[0], stMsg(s)).then(function () { b.disabled = false; });
+      sendOneTo(ST_TOPIC, 'ST AM Stop ' + s[0], stMsg(s)).then(function () { b.disabled = false; });
     };
-    stList.appendChild(b);
+    stAMList.appendChild(b);
+  });
+  var stPMList = document.getElementById('stPMList');
+  ST_PM_STOPS.forEach(function (s) {
+    var b = document.createElement('button');
+    b.className = 'small';
+    b.textContent = 'Stop ' + s[0] + ' — ' + s[1];
+    b.onclick = function () {
+      b.disabled = true;
+      sendOneTo(ST_TOPIC, 'ST PM Stop ' + s[0], stMsg(s)).then(function () { b.disabled = false; });
+    };
+    stPMList.appendChild(b);
   });
   var pmList = document.getElementById('pmList');
   PM_STOPS.forEach(function (p) {

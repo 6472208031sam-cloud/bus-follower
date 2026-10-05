@@ -60,7 +60,7 @@
 </head>
 <body>
 <header>
-  <h1>&#x1F68C; St Cecilia Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v1.9</span></h1>
+  <h1>&#x1F68C; St Cecilia Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v2.0</span></h1>
   <div class="seg">
     <button id="btnAM" class="on">AM</button>
     <button id="btnPM">PM</button>
@@ -570,24 +570,17 @@ function disconnect() {
 function handleMessage(raw, opts) {
   var msg = String(raw), isTest = false;
   if (msg.indexOf(BELL + ' TEST:') === 0) { isTest = true; msg = msg.slice((BELL + ' TEST:').length).trim(); }
-  // St Cecilia: "🚌 Stop A reached: <name>." or "🚌 Final stop reached: <name>."
-  var mStop = msg.match(new RegExp('^' + BUS + ' Stop ([A-D]):'));
+  // St Cecilia AM: "🚌 Stop 1: <name> reached." PM: "🚌 Stop D: <name> reached."
+  var mStop = msg.match(new RegExp('^' + BUS + ' Stop ([1-4A-D]):'));
   var mFinal = msg.indexOf(BUS + ' Final stop reached:') === 0;
   var silent = !!(opts && opts.silent);
   var r = route;
   if (mStop) {
     var s = null;
-    // Map physical letter (A-D from the app) to the active route's stop.
-    // AM: A=1, B=2, C=3, D=4. PM: A=D, B=C, C=B, D=A (reversed).
-    var physLetter = mStop[1];
+    var label = mStop[1];
     var list = routeStops(r);
-    if (r === 'AM') {
-      var numMap = { 'A': 1, 'B': 2, 'C': 3, 'D': 4 };
-      list.forEach(function (x) { if (x.n === numMap[physLetter]) s = x; });
-    } else {
-      var letterMap = { 'A': 'D', 'B': 'C', 'C': 'B', 'D': 'A' };
-      list.forEach(function (x) { if (x.letter === letterMap[physLetter]) s = x; });
-    }
+    // Match by letter (AM: 1-4, PM: D,C,B,A)
+    list.forEach(function (x) { if (x.letter === label) s = x; });
     if (!s) { if (!silent) addLog('Unrecognized stop letter "' + mStop[1] + '": ' + raw, 'ST?', 'warn'); return false; }
     return applyArrival(r, s, isTest, raw, opts);
   } else if (mFinal) {
