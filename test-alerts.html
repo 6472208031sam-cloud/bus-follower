@@ -19,7 +19,7 @@
 </style>
 </head>
 <body>
-<h1>ntfy Alert Test <span style="font-size:0.6em;opacity:0.7;font-weight:normal;">v1.8</span></h1>
+<h1>ntfy Alert Test <span style="font-size:0.6em;opacity:0.7;font-weight:normal;">v1.9</span></h1>
 <p style="font-size:0.9rem;opacity:0.85;">Channel: <code id="chanName" style="background:#222;padding:0.15rem 0.5rem;border-radius:4px;user-select:all;"></code></p>
 <p>Sends <strong>TEST</strong> alerts to the channel saved in the Bus Follower page.</p>
 
@@ -105,7 +105,7 @@ function pmMsg(p) {
   return '🔔 TEST: 🚌 Stop ' + p[0] + ' (' + p[1] + '): ' + p[2] + ' reached.';
 }
 function stMsg(s) {
-  return '🔔 TEST: 🚌 Stop ' + s[0] + ' reached: ' + s[1] + '.';
+  return '🔔 TEST: 🚌 Stop ' + s[0] + ': ' + s[1] + ' reached.';
 }
 function sendTo(topic, msg) {
   return fetch('https://ntfy.sh/' + topic, { method: 'POST', body: msg })
