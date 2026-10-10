@@ -87,7 +87,7 @@
 <section>
   <h2>Channel</h2>
   <div class="row">
-    <input type="text" id="topicInput" placeholder="ntfy channel name" autocomplete="off" value="bus-alerts-05-hdkdhsjbd" />
+    <input type="text" id="topicInput" placeholder="ntfy channel name" autocomplete="off" value="bus-alerts-06-hdkdhsjbd" />
     <button class="act" id="connBtn">Connect</button>
     <button class="act ghost" id="refreshBtn" title="Re-check for new alerts">↻</button>
   </div>
@@ -307,10 +307,10 @@ var topicInput = document.getElementById('topicInput');
 var connBtn = document.getElementById('connBtn');
 var connDot = document.getElementById('connDot');
 // Hardcoded default channel (editable); localStorage overrides if user changed it
-var HARDCODED_TOPIC = 'bus-alerts-05-hdkdhsjbd';
+var HARDCODED_TOPIC = 'bus-alerts-06-hdkdhsjbd';
 // One-time migration: old channels -> new channel (2026-10-04)
 (function migrateTopic() {
-  var olds = ['bus-alerts-zpxz5jrwzkl4pwoo', 'bus-alerts-zpxz5jrwzkl4pwoo-01', 'bus-alerts-01-hdkdhsjbd', 'bus-alerts-02-hdkdhsjbd', 'bus-alerts-03-hdkdhsjbd', 'bus-alerts-04-hdkdhsjbd'];
+  var olds = ['bus-alerts-zpxz5jrwzkl4pwoo', 'bus-alerts-zpxz5jrwzkl4pwoo-01', 'bus-alerts-01-hdkdhsjbd', 'bus-alerts-02-hdkdhsjbd', 'bus-alerts-03-hdkdhsjbd', 'bus-alerts-04-hdkdhsjbd', 'bus-alerts-05-hdkdhsjbd'];
   var cur = localStorage.getItem('busfollower_topic');
   if (olds.indexOf(cur) !== -1) {
     localStorage.setItem('busfollower_topic', HARDCODED_TOPIC);
