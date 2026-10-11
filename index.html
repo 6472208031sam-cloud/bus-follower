@@ -245,7 +245,7 @@ function renderRoute() {
   if (st.complete) {
     var f = list[list.length - 1];
     busMarker = L.marker([f.lat, f.lng], {
-      icon: L.divIcon({ className: '', html: '<div class="arrivedlbl">\u2713 arrived</div>', iconSize: [110, 32], iconAnchor: [55, -18] }),
+      icon: L.divIcon({ className: '', html: '<div class="arrivedlbl">\u2713 Arrived</div>', iconSize: [110, 32], iconAnchor: [55, -18] }),
       zIndexOffset: 1000, interactive: false
     }).addTo(map);
   } else if (st.busIdx >= 0 && st.busIdx < list.length) {
