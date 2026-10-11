@@ -585,6 +585,7 @@ function handleMessage(raw, opts) {
     var st = state[r], list = r === 'AM' ? AM_STOPS : PM_STOPS;
     var whenF = (opts && opts.time) ? new Date(opts.time) : new Date();
     st.complete = true; st.busIdx = list.length - 1; st.lastUpdate = whenF;
+    st.reached[stopKey(list[list.length - 1])] = true;
     lastRoute = r;
     var addedF = recordEvent(r, list[list.length - 1], isTest, raw, true,
                              opts && opts.time, opts && opts.deferUI);
