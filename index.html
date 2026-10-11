@@ -49,6 +49,7 @@
   .pin.done { background:var(--green); color:#fff; }
   .pin.next { box-shadow:0 0 0 4px rgba(53,208,127,.45); }
   .busdot { width:22px; height:22px; border-radius:50%; background:#2f8bff; border:3px solid #fff; box-shadow:0 0 0 3px rgba(47,139,255,.4), 0 2px 8px rgba(0,0,0,.5); }
+  .arrivedot { background:#0b6e4f; color:#fff; font-weight:700; font-size:13px; padding:6px 14px; border-radius:20px; border:3px solid #fff; box-shadow:0 2px 8px rgba(0,0,0,.5); white-space:nowrap; }
   .datebar { display:flex; align-items:center; gap:8px; padding:8px 14px; background:#0d1712; border-bottom:1px solid #223129; }
   .datebar label { color:var(--mut); font-size:.85rem; font-weight:700; }
   #dateSelect { flex:1; padding:8px 10px; border-radius:8px; border:1px solid #2c4034; background:#16241d; color:var(--txt); font-size:.95rem; max-width:320px; }
@@ -241,7 +242,13 @@ function renderRoute() {
       .addTo(pinLayer);
   });
   if (busMarker) { map.removeLayer(busMarker); busMarker = null; }
-  if (st.busIdx >= 0 && st.busIdx < list.length) {
+  if (st.complete) {
+    var f = list[list.length - 1];
+    busMarker = L.marker([f.lat, f.lng], {
+      icon: L.divIcon({ className: '', html: '<div class="arrivedot">\u2713 arrived</div>', iconSize: [96, 34], iconAnchor: [48, 17] }),
+      zIndexOffset: 1000
+    }).addTo(map).bindPopup('<b>Arrived</b><br>' + esc(stopShort(f)));
+  } else if (st.busIdx >= 0 && st.busIdx < list.length) {
     var b = list[st.busIdx];
     busMarker = L.marker([b.lat, b.lng], {
       icon: L.divIcon({ className: '', html: '<div class="busdot"></div>', iconSize: [22, 22], iconAnchor: [11, 11] }),
