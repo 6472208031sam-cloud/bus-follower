@@ -61,7 +61,7 @@
 </head>
 <body>
 <header>
-  <h1>&#x1F68C; St Cecilia Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v2.2</span></h1>
+  <h1>&#x1F68C; St Cecilia Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v2.3</span></h1>
   <div class="seg">
     <button id="btnAM" class="on">AM</button>
     <button id="btnPM">PM</button>
@@ -302,13 +302,14 @@ function renderStatus() {
 }
 
 /* ===== Event log ===== */
-function addLog(text, tag, tagCls) {
+function addLog(text, tag, tagCls, whenISO) {
   var empty = document.getElementById('logEmpty');
   if (empty) empty.remove();
   var log = document.getElementById('log');
   var d = document.createElement('div');
   d.className = 'e';
-  d.innerHTML = '<span class="ts">' + new Date().toLocaleTimeString() + '</span>' +
+  var ts = whenISO ? new Date(whenISO) : new Date();
+  d.innerHTML = '<span class="ts">' + ts.toLocaleTimeString() + '</span>' +
     (tag ? '<span class="tag ' + tagCls + '">' + esc(tag) + '</span>' : '') + esc(text);
   log.insertBefore(d, log.firstChild);
   while (log.children.length > 200) log.removeChild(log.lastChild);
@@ -619,7 +620,7 @@ function handleMessage(raw, opts) {
     var evTimeF = (opts && opts.time) ? new Date(opts.time) : new Date();
     if (torontoDateKey(evTimeF) !== torontoDateKey(new Date())) return addedF;
     addLog((isTest ? '[TEST] ' : '') + 'Final stop reached. Route complete.',
-           (isTest ? 'TEST ' : '') + r, 'test');
+           (isTest ? 'TEST ' : '') + r, 'test', opts && opts.time);
     renderRoute();
     return addedF;
   } else {
@@ -646,7 +647,8 @@ function applyArrival(r, s, isTest, rawMsg, opts) {
   var label = 'Stop ' + s.letter;
   addLog((isTest ? '[TEST] ' : '') + 'Bus reached ' + label +
          (r !== route ? ' \u2014 switch to ' + r + ' to follow' : ''),
-         (isTest ? 'TEST ' : '') + r, isTest ? 'test' : r.toLowerCase());
+         (isTest ? 'TEST ' : '') + r, isTest ? 'test' : r.toLowerCase(),
+         opts && opts.time);
   if (r === route) renderRoute();
   return added;
 }
