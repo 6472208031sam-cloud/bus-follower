@@ -61,7 +61,7 @@
 </head>
 <body>
 <header>
-  <h1>&#x1F68C; Bus Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v2.8</span></h1>
+  <h1>&#x1F68C; Bus Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v2.9</span></h1>
   <div class="seg">
     <button id="btnAM" class="on">AM</button>
     <button id="btnPM">PM</button>
@@ -283,13 +283,14 @@ function renderStatus() {
 }
 
 /* ===== Event log ===== */
-function addLog(text, tag, tagCls) {
+function addLog(text, tag, tagCls, whenISO) {
   var empty = document.getElementById('logEmpty');
   if (empty) empty.remove();
   var log = document.getElementById('log');
   var d = document.createElement('div');
   d.className = 'e';
-  d.innerHTML = '<span class="ts">' + new Date().toLocaleTimeString() + '</span>' +
+  var ts = whenISO ? new Date(whenISO) : new Date();
+  d.innerHTML = '<span class="ts">' + ts.toLocaleTimeString() + '</span>' +
     (tag ? '<span class="tag ' + tagCls + '">' + esc(tag) + '</span>' : '') + esc(text);
   log.insertBefore(d, log.firstChild);
   while (log.children.length > 200) log.removeChild(log.lastChild);
@@ -584,14 +585,15 @@ function handleMessage(raw, opts) {
     if (r !== route) setRoute(r);
     var st = state[r], list = r === 'AM' ? AM_STOPS : PM_STOPS;
     var whenF = (opts && opts.time) ? new Date(opts.time) : new Date();
-    st.complete = true; st.busIdx = list.length - 1; st.lastUpdate = whenF;
-    st.reached[stopKey(list[list.length - 1])] = true;
-    lastRoute = r;
     var addedF = recordEvent(r, list[list.length - 1], isTest, raw, true,
                              opts && opts.time, opts && opts.deferUI);
     if (viewDate || silent) return addedF;
+    if (torontoDateKey(whenF) !== torontoDateKey(new Date())) return addedF;
+    st.complete = true; st.busIdx = list.length - 1; st.lastUpdate = whenF;
+    st.reached[stopKey(list[list.length - 1])] = true;
+    lastRoute = r;
     addLog((isTest ? '[TEST] ' : '') + 'Final stop reached (' + r + '). Route complete.',
-           (isTest ? 'TEST ' : '') + r, 'test');
+           (isTest ? 'TEST ' : '') + r, 'test', opts && opts.time);
     renderRoute();
     return addedF;
   } else {
@@ -601,20 +603,27 @@ function handleMessage(raw, opts) {
 }
 
 function applyArrival(r, s, isTest, rawMsg, opts) {
+  // Live mode: ignore previous-day alerts entirely (from ?since=24h backfill).
+  // Record in history for the date picker, but don't touch live map/log state.
+  var evTime = (opts && opts.time) ? new Date(opts.time) : new Date();
+  var isOld = !viewDate && !(opts && opts.silent) &&
+              torontoDateKey(evTime) !== torontoDateKey(new Date());
   var st = state[r], list = r === 'AM' ? AM_STOPS : PM_STOPS;
   var key = r === 'AM' ? String(s.n) : s.letter;
-  st.reached[key] = true;
-  var idx = list.indexOf(s);
-  if (idx > st.busIdx) st.busIdx = idx;
-  st.lastUpdate = (opts && opts.time) ? new Date(opts.time) : new Date();
-  lastRoute = r;
   var added = recordEvent(r, s, isTest, rawMsg, false, opts && opts.time, opts && opts.deferUI);
   if (viewDate) return added; // history mode: accumulate silently, don't touch the display
   if (opts && opts.silent) return added; // backfill: rendering deferred to the end
+  if (isOld) return added; // previous-day event: history only, no live UI update
+  st.reached[key] = true;
+  var idx = list.indexOf(s);
+  if (idx > st.busIdx) st.busIdx = idx;
+  st.lastUpdate = evTime;
+  lastRoute = r;
   var label = r === 'AM' ? ('Stop ' + s.n) : ('Stop ' + s.letter + ' (' + s.am + ')');
   addLog((isTest ? '[TEST] ' : '') + 'Bus reached ' + label +
          (r !== route ? ' \u2014 switch to ' + r + ' to follow' : ''),
-         (isTest ? 'TEST ' : '') + r, isTest ? 'test' : r.toLowerCase());
+         (isTest ? 'TEST ' : '') + r, isTest ? 'test' : r.toLowerCase(),
+         opts && opts.time);
   if (r === route) renderRoute();
   return added;
 }
