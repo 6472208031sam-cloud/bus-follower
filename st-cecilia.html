@@ -61,7 +61,7 @@
 </head>
 <body>
 <header>
-  <h1>&#x1F68C; St Cecilia Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v2.3</span></h1>
+  <h1>&#x1F68C; St Cecilia Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v2.4</span></h1>
   <div class="seg">
     <button id="btnAM" class="on">AM</button>
     <button id="btnPM">PM</button>
@@ -611,14 +611,13 @@ function handleMessage(raw, opts) {
     if (r !== route) setRoute(r);
     var st = state[r], list = routeStops(r);
     var whenF = (opts && opts.time) ? new Date(opts.time) : new Date();
-    st.complete = true; st.busIdx = list.length - 1; st.lastUpdate = whenF;
-    st.reached[stopKey(list[list.length - 1])] = true;
-    lastRoute = r;
     var addedF = recordEvent(r, list[list.length - 1], isTest, raw, true,
                              opts && opts.time, opts && opts.deferUI);
     if (viewDate || silent) return addedF;
-    var evTimeF = (opts && opts.time) ? new Date(opts.time) : new Date();
-    if (torontoDateKey(evTimeF) !== torontoDateKey(new Date())) return addedF;
+    if (torontoDateKey(whenF) !== torontoDateKey(new Date())) return addedF;
+    st.complete = true; st.busIdx = list.length - 1; st.lastUpdate = whenF;
+    st.reached[stopKey(list[list.length - 1])] = true;
+    lastRoute = r;
     addLog((isTest ? '[TEST] ' : '') + 'Final stop reached. Route complete.',
            (isTest ? 'TEST ' : '') + r, 'test', opts && opts.time);
     renderRoute();
@@ -630,20 +629,22 @@ function handleMessage(raw, opts) {
 }
 
 function applyArrival(r, s, isTest, rawMsg, opts) {
+  // Live mode: ignore previous-day alerts entirely (from ?since=24h backfill).
+  // Record in history for the date picker, but don't touch live map/log state.
+  var evTime = (opts && opts.time) ? new Date(opts.time) : new Date();
+  var isOld = !viewDate && !(opts && opts.silent) &&
+              torontoDateKey(evTime) !== torontoDateKey(new Date());
   var st = state[r], list = routeStops(r);
   var key = s.letter;
-  st.reached[key] = true;
-  var idx = list.indexOf(s);
-  if (idx > st.busIdx) st.busIdx = idx;
-  st.lastUpdate = (opts && opts.time) ? new Date(opts.time) : new Date();
-  lastRoute = r;
   var added = recordEvent(r, s, isTest, rawMsg, false, opts && opts.time, opts && opts.deferUI);
   if (viewDate) return added; // history mode: accumulate silently, don't touch the display
   if (opts && opts.silent) return added; // backfill: rendering deferred to the end
-  // Live mode: ignore previous-day alerts (from ?since=24h backfill).
-  // They're stored in history but shouldn't appear in the live view.
-  var evTime = (opts && opts.time) ? new Date(opts.time) : new Date();
-  if (torontoDateKey(evTime) !== torontoDateKey(new Date())) return added;
+  if (isOld) return added; // previous-day event: history only, no live UI update
+  st.reached[key] = true;
+  var idx = list.indexOf(s);
+  if (idx > st.busIdx) st.busIdx = idx;
+  st.lastUpdate = evTime;
+  lastRoute = r;
   var label = 'Stop ' + s.letter;
   addLog((isTest ? '[TEST] ' : '') + 'Bus reached ' + label +
          (r !== route ? ' \u2014 switch to ' + r + ' to follow' : ''),
