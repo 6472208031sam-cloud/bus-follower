@@ -61,7 +61,7 @@
 </head>
 <body>
 <header>
-  <h1>&#x1F68C; St Cecilia Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v2.1</span></h1>
+  <h1>&#x1F68C; St Cecilia Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v2.2</span></h1>
   <div class="seg">
     <button id="btnAM" class="on">AM</button>
     <button id="btnPM">PM</button>
@@ -616,6 +616,8 @@ function handleMessage(raw, opts) {
     var addedF = recordEvent(r, list[list.length - 1], isTest, raw, true,
                              opts && opts.time, opts && opts.deferUI);
     if (viewDate || silent) return addedF;
+    var evTimeF = (opts && opts.time) ? new Date(opts.time) : new Date();
+    if (torontoDateKey(evTimeF) !== torontoDateKey(new Date())) return addedF;
     addLog((isTest ? '[TEST] ' : '') + 'Final stop reached. Route complete.',
            (isTest ? 'TEST ' : '') + r, 'test');
     renderRoute();
@@ -637,6 +639,10 @@ function applyArrival(r, s, isTest, rawMsg, opts) {
   var added = recordEvent(r, s, isTest, rawMsg, false, opts && opts.time, opts && opts.deferUI);
   if (viewDate) return added; // history mode: accumulate silently, don't touch the display
   if (opts && opts.silent) return added; // backfill: rendering deferred to the end
+  // Live mode: ignore previous-day alerts (from ?since=24h backfill).
+  // They're stored in history but shouldn't appear in the live view.
+  var evTime = (opts && opts.time) ? new Date(opts.time) : new Date();
+  if (torontoDateKey(evTime) !== torontoDateKey(new Date())) return added;
   var label = 'Stop ' + s.letter;
   addLog((isTest ? '[TEST] ' : '') + 'Bus reached ' + label +
          (r !== route ? ' \u2014 switch to ' + r + ' to follow' : ''),
