@@ -61,7 +61,7 @@
 </head>
 <body>
 <header>
-  <h1>&#x1F68C; St Cecilia Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v2.5</span></h1>
+  <h1>&#x1F68C; St Cecilia Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v2.6</span></h1>
   <div class="seg">
     <button id="btnAM" class="on">AM</button>
     <button id="btnPM">PM</button>
@@ -612,6 +612,8 @@ function handleMessage(raw, opts) {
     if (r !== route) setRoute(r);
     var st = state[r], list = routeStops(r);
     var whenF = (opts && opts.time) ? new Date(opts.time) : new Date();
+    var devMatchF = String(raw || '').match(/\[([AiW][0-9]{2})\]\s*$/);
+    var devIdF = devMatchF ? ' [' + devMatchF[1] + ']' : '';
     var addedF = recordEvent(r, list[list.length - 1], isTest, raw, true,
                              opts && opts.time, opts && opts.deferUI);
     if (viewDate || silent) return addedF;
@@ -619,7 +621,7 @@ function handleMessage(raw, opts) {
     st.complete = true; st.busIdx = list.length - 1; st.lastUpdate = whenF;
     st.reached[stopKey(list[list.length - 1])] = true;
     lastRoute = r;
-    addLog((isTest ? '[TEST] ' : '') + 'Final stop reached. Route complete.',
+    addLog((isTest ? '[TEST] ' : '') + 'Final stop reached. Route complete.' + devIdF,
            (isTest ? 'TEST ' : '') + r, 'test', opts && opts.time);
     renderRoute();
     return addedF;
@@ -630,6 +632,8 @@ function handleMessage(raw, opts) {
 }
 
 function applyArrival(r, s, isTest, rawMsg, opts) {
+  var devMatch = String(rawMsg || '').match(/\[([AiW][0-9]{2})\]\s*$/);
+  var devId = devMatch ? ' [' + devMatch[1] + ']' : '';
   // Live mode: ignore previous-day alerts entirely (from ?since=24h backfill).
   // Record in history for the date picker, but don't touch live map/log state.
   var evTime = (opts && opts.time) ? new Date(opts.time) : new Date();
@@ -647,7 +651,7 @@ function applyArrival(r, s, isTest, rawMsg, opts) {
   st.lastUpdate = evTime;
   lastRoute = r;
   var label = 'Stop ' + s.letter;
-  addLog((isTest ? '[TEST] ' : '') + 'Bus reached ' + label +
+  addLog((isTest ? '[TEST] ' : '') + 'Bus reached ' + label + devId +
          (r !== route ? ' \u2014 switch to ' + r + ' to follow' : ''),
          (isTest ? 'TEST ' : '') + r, isTest ? 'test' : r.toLowerCase(),
          opts && opts.time);
