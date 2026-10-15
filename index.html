@@ -57,11 +57,17 @@
   #histBadge { display:none; font-size:.75rem; font-weight:700; background:#3d2b0b; color:#ffcf5d; border-radius:4px; padding:2px 8px; }
   #histBadge.on { display:inline-block; }
   .histnote { padding:6px 14px; color:var(--mut); font-size:.78rem; background:#0d1712; border-bottom:1px solid #223129; }
+  .devfilter { background:#0d1712; border:1px solid #223129; border-radius:8px; padding:8px 12px; margin-bottom:8px; }
+  .devrow { display:flex; align-items:center; gap:8px; padding:6px 0; font-size:.9rem; cursor:pointer; }
+  .devrow input[type=checkbox] { width:18px; height:18px; accent-color:var(--acc); flex:none; }
+  .devdot { width:14px; height:14px; border-radius:50%; flex:none; }
+  .devhint { color:var(--mut); font-size:.85rem; padding:6px 0; }
+  .devbuslbl { background:rgba(0,0,0,.7); color:#fff; font-size:11px; font-weight:800; padding:1px 7px; border-radius:10px; text-align:center; white-space:nowrap; margin-top:2px; }
 </style>
 </head>
 <body>
 <header>
-  <h1>&#x1F68C; Bus Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v3.0</span></h1>
+  <h1>&#x1F68C; Bus Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v3.1</span></h1>
   <div class="seg">
     <button id="btnAM" class="on">AM</button>
     <button id="btnPM">PM</button>
@@ -97,6 +103,12 @@
     <p>On the bus phone, open <b>Bus Stop Alerts</b> &gt; <b>Alerts to another phone</b> panel. The channel name is shown there &mdash; type it in above exactly and tap Connect.</p>
   </details>
 
+  <h2>Devices</h2>
+  <div class="devfilter" id="devFilter">
+    <label class="devrow"><input type="checkbox" id="devAllToggle" checked /> <b>All devices</b></label>
+    <div id="devList"></div>
+  </div>
+
   <h2>Event log</h2>
   <div class="row">
     <button class="act ghost" id="clearLog">Clear log</button>
@@ -122,6 +134,170 @@ var state = {
   AM: { reached: {}, busIdx: -1, complete: false, lastUpdate: null },
   PM: { reached: {}, busIdx: -1, complete: false, lastUpdate: null }
 };
+/* ===== Per-device filter ===== */
+var DEV_UNKNOWN = '?';
+var DEV_COLORS = ['#3b82f6', '#f97316', '#a855f7', '#14b8a6', '#ec4899', '#eab308'];
+var DEVLS_KNOWN = 'busfollower_dev_known';
+var DEVLS_OFF = 'busfollower_dev_off';
+var devStates = {};   /* dev -> { AM: routeState, PM: routeState } */
+var busMarkers = {};  /* dev -> L.marker, used when a subset of devices is shown */
+
+function freshRouteState() { return { reached: {}, busIdx: -1, complete: false, lastUpdate: null }; }
+function devRouteState(dev, r) {
+  if (!devStates[dev]) devStates[dev] = { AM: freshRouteState(), PM: freshRouteState() };
+  return devStates[dev][r];
+}
+function loadDevList(key) {
+  try { var a = JSON.parse(localStorage.getItem(key) || '[]'); return Array.isArray(a) ? a : []; }
+  catch (e) { return []; }
+}
+function saveDevList(key, arr) { try { localStorage.setItem(key, JSON.stringify(arr)); } catch (e) {} }
+function knownDevices() { return loadDevList(DEVLS_KNOWN); }
+function registerDevice(dev, quiet) {
+  var k = knownDevices();
+  if (k.indexOf(dev) === -1) {
+    k.push(dev); k.sort(); saveDevList(DEVLS_KNOWN, k);
+    if (!quiet) renderDevFilter();
+  }
+}
+function deselectedDevices() { return loadDevList(DEVLS_OFF); }
+function isDevSelected(dev) { return deselectedDevices().indexOf(dev) === -1; }
+function selectedDevices() {
+  var off = deselectedDevices();
+  return knownDevices().filter(function (d) { return off.indexOf(d) === -1; });
+}
+function allDevsSelected() { return deselectedDevices().length === 0; }
+function setDevSelected(dev, on) {
+  var off = deselectedDevices(), i = off.indexOf(dev);
+  if (on && i !== -1) off.splice(i, 1);
+  if (!on && i === -1) off.push(dev);
+  saveDevList(DEVLS_OFF, off);
+  renderDevFilter(); renderRoute();
+  if (viewDate) renderHistoryView(); else rebuildLiveLog();
+}
+function setAllDevs(on) {
+  saveDevList(DEVLS_OFF, on ? [] : knownDevices().slice());
+  renderDevFilter(); renderRoute();
+  if (viewDate) renderHistoryView(); else rebuildLiveLog();
+}
+function devColor(dev) {
+  var k = knownDevices().slice().sort(), i = k.indexOf(dev);
+  return DEV_COLORS[(i < 0 ? 0 : i) % DEV_COLORS.length];
+}
+function devLabel(dev) { return dev === DEV_UNKNOWN ? 'no ID' : dev; }
+function mergedSelectedState(r) {
+  var m = freshRouteState();
+  selectedDevices().forEach(function (dev) {
+    var ds = devStates[dev] && devStates[dev][r];
+    if (!ds) return;
+    Object.keys(ds.reached).forEach(function (k) { m.reached[k] = true; });
+    if (ds.busIdx > m.busIdx) m.busIdx = ds.busIdx;
+    if (ds.complete) m.complete = true;
+    if (ds.lastUpdate && (!m.lastUpdate || ds.lastUpdate > m.lastUpdate)) m.lastUpdate = ds.lastUpdate;
+  });
+  return m;
+}
+function devDisplayState(r, dev) {
+  if (viewDate) {
+    var h = loadHistory(), day = h[viewDate];
+    var evs = day ? ((r === 'AM') ? (day.am || []) : (day.pm || [])) : [];
+    return stateFromEvents(r, evs.filter(function (ev) { return (ev.dev || DEV_UNKNOWN) === dev; }));
+  }
+  return (devStates[dev] && devStates[dev][r]) || freshRouteState();
+}
+function displayStateFor(r) {
+  if (!allDevsSelected()) {
+    if (viewDate) {
+      var h = loadHistory(), day = h[viewDate];
+      var evs = day ? ((r === 'AM') ? (day.am || []) : (day.pm || [])) : [];
+      var sel = selectedDevices();
+      return stateFromEvents(r, evs.filter(function (ev) { return sel.indexOf(ev.dev || DEV_UNKNOWN) !== -1; }));
+    }
+    return mergedSelectedState(r);
+  }
+  return getDisplayState(r);
+}
+function rebuildDevStates() {
+  devStates = {};
+  var today = torontoDateKey(new Date());
+  var h = loadHistory(), day = h[today];
+  if (!day) return;
+  ['AM', 'PM'].forEach(function (r) {
+    var evs = (r === 'AM') ? (day.am || []) : (day.pm || []);
+    var byDev = {};
+    evs.forEach(function (ev) {
+      var dev = ev.dev || DEV_UNKNOWN;
+      (byDev[dev] = byDev[dev] || []).push(ev);
+    });
+    Object.keys(byDev).forEach(function (dev) {
+      devStates[dev] = devStates[dev] || { AM: freshRouteState(), PM: freshRouteState() };
+      devStates[dev][r] = stateFromEvents(r, byDev[dev]);
+      registerDevice(dev, true);
+    });
+  });
+}
+function renderDevFilter() {
+  var listEl = document.getElementById('devList');
+  if (!listEl) return;
+  var toggle = document.getElementById('devAllToggle');
+  if (toggle) toggle.checked = allDevsSelected();
+  var known = knownDevices();
+  listEl.innerHTML = '';
+  if (!known.length) {
+    var hint = document.createElement('div');
+    hint.className = 'devhint';
+    hint.textContent = 'No devices seen yet \u2014 they appear here once alerts arrive.';
+    listEl.appendChild(hint);
+    return;
+  }
+  known.forEach(function (dev) {
+    var label = document.createElement('label');
+    label.className = 'devrow';
+    var cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.checked = isDevSelected(dev);
+    cb.addEventListener('change', function () { setDevSelected(dev, cb.checked); });
+    var dot = document.createElement('span');
+    dot.className = 'devdot';
+    dot.style.background = devColor(dev);
+    var nm = document.createElement('span');
+    nm.textContent = devLabel(dev);
+    label.appendChild(cb); label.appendChild(dot); label.appendChild(nm);
+    listEl.appendChild(label);
+  });
+}
+function renderStatusFiltered(list) {
+  var line = document.getElementById('statusLine'), sub = document.getElementById('subLine');
+  var sel = selectedDevices();
+  var best = null, bestDev = null, bestFrac = -1;
+  sel.forEach(function (dev) {
+    var ds = devDisplayState(route, dev);
+    var done = Object.keys(ds.reached).length;
+    var frac = list.length ? done / list.length : 0;
+    if (frac > bestFrac) { best = ds; bestDev = dev; bestFrac = frac; }
+  });
+  document.getElementById('progFill').style.width = (100 * Math.max(0, bestFrac)) + '%';
+  if (!best || bestFrac < 0) {
+    line.textContent = 'No bus updates yet';
+    sub.textContent = 'No selected devices have reported.';
+    return;
+  }
+  if (best.complete) {
+    line.textContent = 'Route complete \u2014 [' + devLabel(bestDev) + '] reached the final stop';
+    sub.textContent = best.lastUpdate ? ('Last update: ' + best.lastUpdate.toLocaleTimeString()) : '';
+  } else if (best.busIdx >= 0) {
+    var s = list[best.busIdx];
+    line.textContent = 'Bus at ' + stopShort(s) + ' of ' + list.length + ' [' + devLabel(bestDev) + ']';
+    sub.textContent = (route === 'AM' && s.t ? s.t + ' \u00B7 ' : '') +
+      'Last update: ' + (best.lastUpdate ? best.lastUpdate.toLocaleTimeString() : '\u2014');
+  } else {
+    line.textContent = 'No bus updates yet';
+    sub.textContent = 'Selected devices have not reported.';
+  }
+}
+
+document.getElementById('devAllToggle').addEventListener('change', function () { setAllDevs(this.checked); });
+
 var lastRoute = null;
 var evtSrc = null;
 
@@ -148,7 +324,7 @@ function pruneHistory(h) {
   Object.keys(h).forEach(function (k) { if (k < cutoffKey) delete h[k]; });
   return h;
 }
-function recordEvent(r, s, isTest, rawMsg, isFinal, whenISO, deferUI) {
+function recordEvent(r, s, isTest, rawMsg, isFinal, whenISO, deferUI, dev) {
   var now = whenISO ? new Date(whenISO) : new Date();
   var key = torontoDateKey(now);
   var h = pruneHistory(loadHistory());
@@ -160,13 +336,13 @@ function recordEvent(r, s, isTest, rawMsg, isFinal, whenISO, deferUI) {
   var t = now.getTime();
   for (var i = 0; i < arr.length; i++) {
     var e = arr[i];
-    if (e.stop === evStop && e.letter === evLetter &&
+    if (e.stop === evStop && e.letter === evLetter && (e.dev || DEV_UNKNOWN) === (dev || DEV_UNKNOWN) &&
         Math.abs(t - new Date(e.time).getTime()) < 60000) {
       return false;
     }
   }
   arr.push({ stop: evStop, letter: evLetter, time: now.toISOString(),
-             msg: String(rawMsg), test: !!isTest, final: !!isFinal });
+             msg: String(rawMsg), test: !!isTest, final: !!isFinal, dev: dev || DEV_UNKNOWN });
   if (arr.length > 200) arr.splice(0, arr.length - 200);
   h[key] = day;
   saveHistory(h);
@@ -234,7 +410,7 @@ function renderRoute() {
   if (pinLayer) map.removeLayer(pinLayer);
   routeLine = L.polyline(path(), { color: '#0b6e4f', weight: 4, opacity: 0.9 }).addTo(map);
   pinLayer = L.layerGroup().addTo(map);
-  var st = getDisplayState(route), list = stops();
+  var st = displayStateFor(route), list = stops();
   list.forEach(function (s, i) {
     var cls = st.reached[stopKey(s)] ? 'done' : (i === st.busIdx + 1 && !st.complete ? 'next' : '');
     L.marker([s.lat, s.lng], { icon: pinIcon(s, cls) })
@@ -242,7 +418,20 @@ function renderRoute() {
       .addTo(pinLayer);
   });
   if (busMarker) { map.removeLayer(busMarker); busMarker = null; }
-  if (st.complete) {
+  Object.keys(busMarkers).forEach(function (d) { map.removeLayer(busMarkers[d]); delete busMarkers[d]; });
+  if (!allDevsSelected()) {
+    selectedDevices().forEach(function (dev) {
+      var ds = devDisplayState(route, dev);
+      var atIdx = ds.complete ? list.length - 1 : ds.busIdx;
+      if (atIdx < 0 || atIdx >= list.length) return;
+      var b = list[atIdx];
+      var color = devColor(dev);
+      busMarkers[dev] = L.marker([b.lat, b.lng], {
+        icon: L.divIcon({ className: '', html: '<div style="text-align:center"><div class="busdot" style="background:' + color + ';box-shadow:0 0 0 3px ' + color + '55, 0 2px 8px rgba(0,0,0,.5)"></div><div class="devbuslbl">' + esc(devLabel(dev)) + '</div></div>', iconSize: [46, 46], iconAnchor: [23, 14] }),
+        zIndexOffset: 1000
+      }).addTo(map).bindPopup('<b>Bus here [' + esc(devLabel(dev)) + ']</b><br>' + esc(stopShort(b)));
+    });
+  } else if (st.complete) {
     var f = list[list.length - 1];
     busMarker = L.marker([f.lat, f.lng], {
       icon: L.divIcon({ className: '', html: '<div class="arrivedlbl">\u2713 Arrived</div>', iconSize: [110, 32], iconAnchor: [55, -18] }),
@@ -263,7 +452,9 @@ function renderRoute() {
 }
 
 function renderStatus() {
-  var st = getDisplayState(route), list = stops();
+  var list = stops();
+  if (!allDevsSelected()) { renderStatusFiltered(list); return; }
+  var st = getDisplayState(route);
   var line = document.getElementById('statusLine'), sub = document.getElementById('subLine');
   var done = Object.keys(st.reached).length;
   document.getElementById('progFill').style.width = (100 * done / list.length) + '%';
@@ -585,14 +776,22 @@ function handleMessage(raw, opts) {
     if (r !== route) setRoute(r);
     var st = state[r], list = r === 'AM' ? AM_STOPS : PM_STOPS;
     var whenF = (opts && opts.time) ? new Date(opts.time) : new Date();
+    var devMatchF = String(raw || '').match(/\[([AiW][0-9]{2})\]\s*$/);
+    var devF = devMatchF ? devMatchF[1] : DEV_UNKNOWN;
+    var devIdF = devMatchF ? ' [' + devMatchF[1] + ']' : '';
+    registerDevice(devF);
     var addedF = recordEvent(r, list[list.length - 1], isTest, raw, true,
-                             opts && opts.time, opts && opts.deferUI);
+                             opts && opts.time, opts && opts.deferUI, devF);
     if (viewDate || silent) return addedF;
     if (torontoDateKey(whenF) !== torontoDateKey(new Date())) return addedF;
     st.complete = true; st.busIdx = list.length - 1; st.lastUpdate = whenF;
-    st.reached[stopKey(list[list.length - 1])] = true;
+    var keyF = stopKey(list[list.length - 1]);
+    st.reached[keyF] = true;
+    var dstF = devRouteState(devF, r);
+    dstF.complete = true; dstF.busIdx = list.length - 1; dstF.lastUpdate = whenF;
+    dstF.reached[keyF] = true;
     lastRoute = r;
-    addLog((isTest ? '[TEST] ' : '') + 'Final stop reached (' + r + '). Route complete.' + devId,
+    if (isDevSelected(devF)) addLog((isTest ? '[TEST] ' : '') + 'Final stop reached (' + r + '). Route complete.' + devIdF,
            (isTest ? 'TEST ' : '') + r, 'test', opts && opts.time);
     renderRoute();
     return addedF;
@@ -605,6 +804,8 @@ function handleMessage(raw, opts) {
 function applyArrival(r, s, isTest, rawMsg, opts) {
   var devMatch = String(rawMsg || '').match(/\[([AiW][0-9]{2})\]\s*$/);
   var devId = devMatch ? ' [' + devMatch[1] + ']' : '';
+  var dev = devMatch ? devMatch[1] : DEV_UNKNOWN;
+  registerDevice(dev);
   // Live mode: ignore previous-day alerts entirely (from ?since=24h backfill).
   // Record in history for the date picker, but don't touch live map/log state.
   var evTime = (opts && opts.time) ? new Date(opts.time) : new Date();
@@ -612,7 +813,7 @@ function applyArrival(r, s, isTest, rawMsg, opts) {
               torontoDateKey(evTime) !== torontoDateKey(new Date());
   var st = state[r], list = r === 'AM' ? AM_STOPS : PM_STOPS;
   var key = r === 'AM' ? String(s.n) : s.letter;
-  var added = recordEvent(r, s, isTest, rawMsg, false, opts && opts.time, opts && opts.deferUI);
+  var added = recordEvent(r, s, isTest, rawMsg, false, opts && opts.time, opts && opts.deferUI, dev);
   if (viewDate) return added; // history mode: accumulate silently, don't touch the display
   if (opts && opts.silent) return added; // backfill: rendering deferred to the end
   if (isOld) return added; // previous-day event: history only, no live UI update
@@ -621,8 +822,12 @@ function applyArrival(r, s, isTest, rawMsg, opts) {
   if (idx > st.busIdx) st.busIdx = idx;
   st.lastUpdate = evTime;
   lastRoute = r;
+  var dst = devRouteState(dev, r);
+  dst.reached[key] = true;
+  if (idx > dst.busIdx) dst.busIdx = idx;
+  dst.lastUpdate = evTime;
   var label = r === 'AM' ? ('Stop ' + s.n) : ('Stop ' + s.letter + ' (' + s.am + ')');
-  addLog((isTest ? '[TEST] ' : '') + 'Bus reached ' + label + devId +
+  if (isDevSelected(dev)) addLog((isTest ? '[TEST] ' : '') + 'Bus reached ' + label + devId +
          (r !== route ? ' \u2014 switch to ' + r + ' to follow' : ''),
          (isTest ? 'TEST ' : '') + r, isTest ? 'test' : r.toLowerCase(),
          opts && opts.time);
@@ -682,7 +887,8 @@ function logEntryFromEvent(r, ev) {
     timeZone: 'America/Toronto', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false
   });
   var label = (r === 'AM') ? ('Stop ' + ev.stop) : ('Stop ' + ev.letter + ' (' + ev.stop + ')');
-  var txt = (ev.test ? '[TEST] ' : '') + (ev.final ? 'Final stop reached' : ('Bus reached ' + label));
+  var devTag = (ev.dev && ev.dev !== DEV_UNKNOWN) ? ' [' + ev.dev + ']' : '';
+  var txt = (ev.test ? '[TEST] ' : '') + (ev.final ? 'Final stop reached' : ('Bus reached ' + label)) + devTag;
   var tagCls = ev.test ? 'test' : r.toLowerCase();
   d.innerHTML = '<span class="ts">' + esc(t) + '</span>' +
     '<span class="tag ' + tagCls + '">' + esc((ev.test ? 'TEST ' : '') + r) + '</span>' + esc(txt);
@@ -694,6 +900,10 @@ function renderHistoryView() {
   var h = loadHistory();
   var day = h[viewDate];
   var events = day ? ((route === 'AM') ? (day.am || []) : (day.pm || [])) : [];
+  if (!allDevsSelected()) {
+    var hsel = selectedDevices();
+    events = events.filter(function (ev) { return hsel.indexOf(ev.dev || DEV_UNKNOWN) !== -1; });
+  }
   if (!events.length) {
     log.innerHTML = '<div id="logEmpty">No ' + route + ' events on ' + dateLabel(viewDate) + '.</div>';
   } else {
@@ -731,6 +941,10 @@ function rebuildLiveLog() {
     log.innerHTML = '<div id="logEmpty">No events yet. Arrivals posted to the channel will appear here.</div>';
     return;
   }
+  if (!allDevsSelected()) {
+    var fsel = selectedDevices();
+    all = all.filter(function (item) { return fsel.indexOf(item.ev.dev || DEV_UNKNOWN) !== -1; });
+  }
   all.sort(function (a, b) { return new Date(b.ev.time) - new Date(a.ev.time); });
   all.forEach(function (item) { log.appendChild(logEntryFromEvent(item.r, item.ev)); });
 }
@@ -748,6 +962,10 @@ document.getElementById('clearHistory').addEventListener('click', function () {
     AM: { reached: {}, busIdx: -1, complete: false, lastUpdate: null },
     PM: { reached: {}, busIdx: -1, complete: false, lastUpdate: null }
   };
+  devStates = {};
+  saveDevList(DEVLS_KNOWN, []);
+  saveDevList(DEVLS_OFF, []);
+  renderDevFilter();
   viewDate = null;
   document.getElementById('dateSelect').value = 'live';
   refreshDatePicker();
@@ -760,7 +978,9 @@ document.getElementById('clearHistory').addEventListener('click', function () {
   var h = pruneHistory(loadHistory());
   saveHistory(h);
   restoreToday();
+  rebuildDevStates();
   refreshDatePicker();
+  renderDevFilter();
   rebuildLiveLog();
 })();
 
