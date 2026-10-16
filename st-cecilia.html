@@ -67,7 +67,7 @@
 </head>
 <body>
 <header>
-  <h1>&#x1F68C; St Cecilia Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v3.0</span></h1>
+  <h1>&#x1F68C; St Cecilia Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v3.1</span></h1>
   <div class="seg">
     <button id="btnAM" class="on">AM</button>
     <button id="btnPM">PM</button>
@@ -130,18 +130,20 @@ var AM_STOPS = [
   {"n": 4, "letter": "4", "name": "Emma", "lat": 43.497004, "lng": -79.718877},
   {"n": 5, "letter": "5", "name": "Natalia", "lat": 43.496826, "lng": -79.718729},
   {"n": 6, "letter": "6", "name": "Threshing Mills", "lat": 43.496391, "lng": -79.718768},
-  {"n": 7, "letter": "7", "name": "Buttonbush", "lat": 43.496237, "lng": -79.720459},
-  {"n": 8, "letter": "8", "name": "St. Cecilia", "lat": 43.495124, "lng": -79.721188}
+  {"n": 7, "letter": "7", "name": "William Rose", "lat": 43.496354, "lng": -79.719760},
+  {"n": 8, "letter": "8", "name": "Buttonbush", "lat": 43.496237, "lng": -79.720459},
+  {"n": 9, "letter": "9", "name": "St. Cecilia", "lat": 43.495124, "lng": -79.721188}
 ];
 var PM_STOPS = [
   {"n": 1, "letter": "A", "name": "St. Cecilia", "lat": 43.495124, "lng": -79.721188},
   {"n": 2, "letter": "B", "name": "Buttonbush", "lat": 43.496237, "lng": -79.720459},
-  {"n": 3, "letter": "C", "name": "Threshing Mills", "lat": 43.496391, "lng": -79.718768},
-  {"n": 4, "letter": "D", "name": "Natalia", "lat": 43.496826, "lng": -79.718729},
-  {"n": 5, "letter": "E", "name": "Emma", "lat": 43.497004, "lng": -79.718877},
-  {"n": 6, "letter": "F", "name": "En Route", "lat": 43.497586, "lng": -79.719657},
-  {"n": 7, "letter": "G", "name": "Walking", "lat": 43.498164, "lng": -79.720464},
-  {"n": 8, "letter": "H", "name": "Mia", "lat": 43.498334, "lng": -79.720660}
+  {"n": 3, "letter": "C", "name": "William Rose", "lat": 43.496354, "lng": -79.719760},
+  {"n": 4, "letter": "D", "name": "Threshing Mills", "lat": 43.496391, "lng": -79.718768},
+  {"n": 5, "letter": "E", "name": "Natalia", "lat": 43.496826, "lng": -79.718729},
+  {"n": 6, "letter": "F", "name": "Emma", "lat": 43.497004, "lng": -79.718877},
+  {"n": 7, "letter": "G", "name": "En Route", "lat": 43.497586, "lng": -79.719657},
+  {"n": 8, "letter": "H", "name": "Walking", "lat": 43.498164, "lng": -79.720464},
+  {"n": 9, "letter": "I", "name": "Mia", "lat": 43.498334, "lng": -79.720660}
 ];
 function routeStops(r) { return r === 'AM' ? AM_STOPS : PM_STOPS; }
 var STOPS = AM_STOPS; // default, for code that doesn't take route
@@ -781,7 +783,7 @@ function handleMessage(raw, opts) {
   var msg = String(raw), isTest = false;
   if (msg.indexOf(BELL + ' TEST:') === 0) { isTest = true; msg = msg.slice((BELL + ' TEST:').length).trim(); }
   // St Cecilia AM: "🚌 Stop 1: <name> reached." PM: "🚌 Stop A (5): <name> reached."
-  var mStop = msg.match(new RegExp('^' + BUS + ' Stop ([1-8A-H])(?: \\(\\d+\\))?:'));
+  var mStop = msg.match(new RegExp('^' + BUS + ' Stop ([1-9A-I])(?: \\(\\d+\\))?:'));
   var mFinal = msg.indexOf(BUS + ' Final stop reached:') === 0 ||
                msg.indexOf(BUS + ' Final stop reached (AM):') === 0 ||
                msg.indexOf(BUS + ' Final stop reached (PM):') === 0;
