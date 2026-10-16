@@ -63,11 +63,14 @@
   .devdot { width:14px; height:14px; border-radius:50%; flex:none; }
   .devhint { color:var(--mut); font-size:.85rem; padding:6px 0; }
   .devbuslbl { background:rgba(0,0,0,.7); color:#fff; font-size:11px; font-weight:800; padding:1px 7px; border-radius:10px; text-align:center; white-space:nowrap; margin-top:2px; }
+  .waitlbl { background:#b45309; color:#fff; font-weight:800; font-size:15px; padding:5px 16px; border-radius:18px; text-align:center; white-space:nowrap; box-shadow:0 2px 6px rgba(0,0,0,.35); }
+  .gotofflbl { background:#475569; color:#fff; font-weight:800; font-size:15px; padding:5px 16px; border-radius:18px; text-align:center; white-space:nowrap; box-shadow:0 2px 6px rgba(0,0,0,.35); }
+  .phonedot { width:22px; height:22px; border-radius:50%; background:#35d07f; border:3px solid #fff; box-shadow:0 0 0 3px rgba(53,208,127,.4), 0 2px 8px rgba(0,0,0,.5); display:grid; place-items:center; font-size:12px; }
 </style>
 </head>
 <body>
 <header>
-  <h1>&#x1F68C; St Cecilia Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v3.1</span></h1>
+  <h1>&#x1F68C; St Cecilia Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v3.2</span></h1>
   <div class="seg">
     <button id="btnAM" class="on">AM</button>
     <button id="btnPM">PM</button>
@@ -122,7 +125,7 @@
 <script>
 "use strict";
 
-// AM: numbered 1-7 in order. PM: lettered, reverse of the AM route.
+// AM: numbered 1-9 in order. PM: lettered (A-I), reverse of the AM route.
 var AM_STOPS = [
   {"n": 1, "letter": "1", "name": "Mia", "lat": 43.498334, "lng": -79.720660},
   {"n": 2, "letter": "2", "name": "Walking", "lat": 43.498164, "lng": -79.720464},
@@ -151,14 +154,11 @@ var ST_PATH = [[43.498334,-79.720660],[43.497004,-79.718877],[43.496826,-79.7187
 var PM_PATH = [[43.495124,-79.721188],[43.496237,-79.720459],[43.496826,-79.718729],[43.497004,-79.718877],[43.498334,-79.720660]];
 function routePath(r) { return r === 'AM' ? ST_PATH : PM_PATH; }
 
-var BUS = "\uD83D\uDE8C", BELL = "\uD83D\uDD14";
+var BUS = "\uD83D\uDE8C", BELL = "\uD83D\uDD14", PHONE = "\uD83D\uDCF1";
 
 /* ===== State ===== */
 var route = 'AM';
-var state = {
-  AM: { reached: {}, busIdx: -1, complete: false, lastUpdate: null },
-  PM: { reached: {}, busIdx: -1, complete: false, lastUpdate: null }
-};
+var state = { AM: freshRouteState(), PM: freshRouteState() };
 /* ===== Per-device filter ===== */
 var DEV_UNKNOWN = '?';
 var DEV_COLORS = ['#3b82f6', '#f97316', '#a855f7', '#14b8a6', '#ec4899', '#eab308'];
@@ -167,7 +167,7 @@ var DEVLS_OFF = 'stcfollower_dev_off';
 var devStates = {};   /* dev -> { AM: routeState, PM: routeState } */
 var busMarkers = {};  /* dev -> L.marker, used when a subset of devices is shown */
 
-function freshRouteState() { return { reached: {}, busIdx: -1, complete: false, lastUpdate: null }; }
+function freshRouteState() { return { reached: {}, busIdx: -1, complete: false, lastUpdate: null, waiting: null, done: false, offStop: null }; }
 function devRouteState(dev, r) {
   if (!devStates[dev]) devStates[dev] = { AM: freshRouteState(), PM: freshRouteState() };
   return devStates[dev][r];
@@ -218,6 +218,9 @@ function mergedSelectedState(r) {
     Object.keys(ds.reached).forEach(function (k) { m.reached[k] = true; });
     if (ds.busIdx > m.busIdx) m.busIdx = ds.busIdx;
     if (ds.complete) m.complete = true;
+    if (ds.done) m.done = true;
+    if (!m.offStop && ds.offStop) m.offStop = ds.offStop;
+    if (!m.waiting && ds.waiting && ds.busIdx < 0) m.waiting = ds.waiting;
     if (ds.lastUpdate && (!m.lastUpdate || ds.lastUpdate > m.lastUpdate)) m.lastUpdate = ds.lastUpdate;
   });
   return m;
@@ -294,8 +297,10 @@ function renderDevFilter() {
 function renderStatusFiltered(list) {
   var line = document.getElementById('statusLine'), sub = document.getElementById('subLine');
   var sel = selectedDevices();
+  var pool = sel.filter(function (dev) { return !devDisplayState(route, dev).done; });
+  if (!pool.length) pool = sel; // all devices done: show them anyway
   var best = null, bestDev = null, bestFrac = -1;
-  sel.forEach(function (dev) {
+  pool.forEach(function (dev) {
     var ds = devDisplayState(route, dev);
     var done = Object.keys(ds.reached).length;
     var frac = list.length ? done / list.length : 0;
@@ -309,6 +314,14 @@ function renderStatusFiltered(list) {
   }
   if (best.complete) {
     line.textContent = 'Route complete \u2014 [' + devLabel(bestDev) + '] reached the final stop';
+    sub.textContent = best.lastUpdate ? ('Last update: ' + best.lastUpdate.toLocaleTimeString()) : '';
+  } else if (best.done && best.offStop) {
+    var bOff = stopByKey(route, best.offStop);
+    line.textContent = '\uD83D\uDCF1 [' + devLabel(bestDev) + '] Got off bus at ' + (bOff ? stopShort(bOff) : 'Stop ' + best.offStop);
+    sub.textContent = best.lastUpdate ? ('Last update: ' + best.lastUpdate.toLocaleTimeString()) : '';
+  } else if (best.waiting && best.busIdx < 0) {
+    var bWait = stopByKey(route, best.waiting);
+    line.textContent = '\uD83D\uDCF1 [' + devLabel(bestDev) + '] Waiting for bus at ' + (bWait ? stopShort(bWait) : 'Stop ' + best.waiting);
     sub.textContent = best.lastUpdate ? ('Last update: ' + best.lastUpdate.toLocaleTimeString()) : '';
   } else if (best.busIdx >= 0) {
     var s = list[best.busIdx];
@@ -349,7 +362,7 @@ function pruneHistory(h) {
   Object.keys(h).forEach(function (k) { if (k < cutoffKey) delete h[k]; });
   return h;
 }
-function recordEvent(r, s, isTest, rawMsg, isFinal, whenISO, deferUI, dev) {
+function recordEvent(r, s, isTest, rawMsg, isFinal, whenISO, deferUI, dev, kind) {
   var now = whenISO ? new Date(whenISO) : new Date();
   var key = torontoDateKey(now);
   var h = pruneHistory(loadHistory());
@@ -369,7 +382,7 @@ function recordEvent(r, s, isTest, rawMsg, isFinal, whenISO, deferUI, dev) {
     }
   }
   arr.push({ stop: evStop, letter: evLetter, time: now.toISOString(),
-             msg: String(rawMsg), test: !!isTest, final: !!isFinal, dev: dev || DEV_UNKNOWN });
+             msg: String(rawMsg), test: !!isTest, final: !!isFinal, dev: dev || DEV_UNKNOWN, kind: kind || 'bus' });
   if (arr.length > 200) arr.splice(0, arr.length - 200);
   h[key] = day;
   saveHistory(h);
@@ -377,18 +390,20 @@ function recordEvent(r, s, isTest, rawMsg, isFinal, whenISO, deferUI, dev) {
   return true;
 }
 function stateFromEvents(r, events) {
-  var st = { reached: {}, busIdx: -1, complete: false, lastUpdate: null };
+  var st = freshRouteState();
   var list = routeStops(r);
   events.forEach(function (ev) {
     var key = ev.letter;
+    var t = new Date(ev.time);
+    if (!st.lastUpdate || t > st.lastUpdate) st.lastUpdate = t;
+    if (ev.kind === 'wait') { if (st.busIdx < 0 && !st.waiting) st.waiting = key; return; }
+    if (ev.kind === 'off') { st.reached[key] = true; st.done = true; st.offStop = key; st.waiting = null; return; }
     st.reached[key] = true;
     var idx = -1;
     list.forEach(function (s, i) {
       if (s.letter === ev.letter) idx = i;
     });
     if (idx > st.busIdx) st.busIdx = idx;
-    var t = new Date(ev.time);
-    if (!st.lastUpdate || t > st.lastUpdate) st.lastUpdate = t;
     if (ev.final) { st.complete = true; st.busIdx = list.length - 1; }
   });
   return st;
@@ -397,7 +412,7 @@ function getDisplayState(r) {
   if (!viewDate) return state[r];
   var h = loadHistory();
   var day = h[viewDate];
-  if (!day) return { reached: {}, busIdx: -1, complete: false, lastUpdate: null };
+  if (!day) return freshRouteState();
   return stateFromEvents(r, (r === 'AM' ? day.am : day.pm) || []);
 }
 function restoreToday() {
@@ -417,6 +432,7 @@ function stops() { return routeStops(route); }
 function path()  { return routePath(route); }
 function stopKey(s) { return s.letter; }
 function stopShort(s) { return 'Stop ' + s.letter; }
+function stopByKey(r, key) { var f = null; routeStops(r).forEach(function (s) { if (s.letter === key) f = s; }); return f; }
 function esc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
 
 /* ===== Map ===== */
@@ -449,10 +465,30 @@ function renderRoute() {
   if (!allDevsSelected()) {
     selectedDevices().forEach(function (dev) {
       var ds = devDisplayState(route, dev);
+      var color = devColor(dev);
+      if (ds.done && ds.offStop) {
+        var os = stopByKey(route, ds.offStop);
+        if (os) {
+          busMarkers[dev] = L.marker([os.lat, os.lng], {
+            icon: L.divIcon({ className: '', html: '<div class="gotofflbl">\u2713 Got off [' + esc(devLabel(dev)) + ']</div>', iconSize: [170, 32], iconAnchor: [85, -18] }),
+            zIndexOffset: 1000
+          }).addTo(map).bindPopup('<b>Got off bus [' + esc(devLabel(dev)) + ']</b><br>' + esc(stopShort(os)));
+        }
+        return;
+      }
+      if (ds.waiting && ds.busIdx < 0) {
+        var ws = stopByKey(route, ds.waiting);
+        if (ws) {
+          busMarkers[dev] = L.marker([ws.lat, ws.lng], {
+            icon: L.divIcon({ className: '', html: '<div style="text-align:center"><div class="phonedot">\uD83D\uDCF1</div><div class="devbuslbl">' + esc(devLabel(dev)) + ' \u00B7 waiting</div></div>', iconSize: [70, 46], iconAnchor: [35, 14] }),
+            zIndexOffset: 1000
+          }).addTo(map).bindPopup('<b>Waiting for bus [' + esc(devLabel(dev)) + ']</b><br>' + esc(stopShort(ws)));
+        }
+        return;
+      }
       var atIdx = ds.complete ? list.length - 1 : ds.busIdx;
       if (atIdx < 0 || atIdx >= list.length) return;
       var b = list[atIdx];
-      var color = devColor(dev);
       busMarkers[dev] = L.marker([b.lat, b.lng], {
         icon: L.divIcon({ className: '', html: '<div style="text-align:center"><div class="busdot" style="background:' + color + ';box-shadow:0 0 0 3px ' + color + '55, 0 2px 8px rgba(0,0,0,.5)"></div><div class="devbuslbl">' + esc(devLabel(dev)) + '</div></div>', iconSize: [46, 46], iconAnchor: [23, 14] }),
         zIndexOffset: 1000
@@ -464,6 +500,18 @@ function renderRoute() {
       icon: L.divIcon({ className: '', html: '<div class="arrivedlbl">\u2713 Arrived</div>', iconSize: [110, 32], iconAnchor: [55, -18] }),
       zIndexOffset: 1000, interactive: false
     }).addTo(map);
+  } else if (st.done && st.offStop) {
+    var agOff = stopByKey(route, st.offStop);
+    if (agOff) busMarker = L.marker([agOff.lat, agOff.lng], {
+      icon: L.divIcon({ className: '', html: '<div class="gotofflbl">\u2713 Got off bus</div>', iconSize: [150, 32], iconAnchor: [75, -18] }),
+      zIndexOffset: 1000, interactive: false
+    }).addTo(map).bindPopup('<b>Got off bus</b><br>' + esc(stopShort(agOff)));
+  } else if (st.waiting && st.busIdx < 0) {
+    var agWait = stopByKey(route, st.waiting);
+    if (agWait) busMarker = L.marker([agWait.lat, agWait.lng], {
+      icon: L.divIcon({ className: '', html: '<div class="waitlbl">\uD83D\uDCF1 Waiting for bus</div>', iconSize: [180, 32], iconAnchor: [90, -18] }),
+      zIndexOffset: 1000, interactive: false
+    }).addTo(map).bindPopup('<b>Waiting for bus</b><br>' + esc(stopShort(agWait)));
   } else if (st.busIdx >= 0 && st.busIdx < list.length) {
     var b = list[st.busIdx];
     busMarker = L.marker([b.lat, b.lng], {
@@ -487,6 +535,14 @@ function renderStatus() {
   document.getElementById('progFill').style.width = (100 * done / list.length) + '%';
   if (st.complete) {
     line.textContent = 'Route complete \u2014 bus reached the final stop';
+    sub.textContent = st.lastUpdate ? ('Last update: ' + st.lastUpdate.toLocaleTimeString()) : '';
+  } else if (st.done && st.offStop) {
+    var sOff = stopByKey(route, st.offStop);
+    line.textContent = '\uD83D\uDCF1 Got off bus at ' + (sOff ? stopShort(sOff) : 'Stop ' + st.offStop);
+    sub.textContent = st.lastUpdate ? ('Last update: ' + st.lastUpdate.toLocaleTimeString()) : '';
+  } else if (st.waiting && st.busIdx < 0) {
+    var sWait = stopByKey(route, st.waiting);
+    line.textContent = '\uD83D\uDCF1 Waiting for bus at ' + (sWait ? stopShort(sWait) : 'Stop ' + st.waiting);
     sub.textContent = st.lastUpdate ? ('Last update: ' + st.lastUpdate.toLocaleTimeString()) : '';
   } else if (st.busIdx >= 0) {
     var s = list[st.busIdx];
@@ -624,7 +680,7 @@ function backfillFromNtfy(topic) {
   var htmlUrl = 'https://ntfy.sh/' + encodeURIComponent(topic);
   function parseHtmlMessages(html) {
     var found = [];
-    var re = /🔔 TEST: 🚌 Stop [^<]{1,200}? reached\.|🚌 Stop [^<]{1,200}? reached\.|🚌 Final stop reached:[^<]{1,200}?\./g;
+    var re = /🔔 TEST: 🚌 Stop [^<]{1,200}? reached\.|🚌 Stop [^<]{1,200}? reached\.|🚌 Final stop reached:[^<]{1,200}?\.|📱 \\[[AiW][0-9]{2}\\] [^<]{1,200}?\.|🚌 \\[[AiW][0-9]{2}\\] at [^<]{1,200}?\./g;
     var m, now = Math.floor(Date.now() / 1000);
     while ((m = re.exec(html)) !== null) {
       var txt = m[0].replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>');
@@ -782,28 +838,44 @@ function disconnect() {
 function handleMessage(raw, opts) {
   var msg = String(raw), isTest = false;
   if (msg.indexOf(BELL + ' TEST:') === 0) { isTest = true; msg = msg.slice((BELL + ' TEST:').length).trim(); }
-  // St Cecilia AM: "🚌 Stop 1: <name> reached." PM: "🚌 Stop A (5): <name> reached."
+  // New "My Stop" device-id-first formats (v3.2+):
+  //   📱 [A98] waiting at Stop 1: Mia.
+  //   📱 [A98] got off at Stop I: Mia.
+  //   🚌 [A98] at Stop 2: Walking.              -> advances like a stop arrival
+  //   📱 [A98] arrived at Stop 2: Walking.      -> auto mode, advances
+  //   🚌 [A98] at Stop 9: St. Cecilia. Route complete.
+  //   📱 [A98] arrived at final stop: St. Cecilia.
+  var mWait = msg.match(new RegExp('^' + PHONE + ' \\[([AiW][0-9]{2})\\] waiting at Stop ([1-9A-I])(?: \\(\\d+\\))?:'));
+  var mOff  = msg.match(new RegExp('^' + PHONE + ' \\[([AiW][0-9]{2})\\] got off at Stop ([1-9A-I])(?: \\(\\d+\\))?:'));
+  var mBusAt = msg.match(new RegExp('^' + BUS + ' \\[([AiW][0-9]{2})\\] at Stop ([1-9A-I])(?: \\(\\d+\\))?:'));
+  var mArr  = msg.match(new RegExp('^' + PHONE + ' \\[([AiW][0-9]{2})\\] arrived at Stop ([1-9A-I])(?: \\(\\d+\\))?:'));
+  var mArrF = msg.match(new RegExp('^' + PHONE + ' \\[([AiW][0-9]{2})\\] arrived at final stop:'));
+  var silent = !!(opts && opts.silent);
+  if (mWait || mOff || mBusAt || mArr || mArrF) {
+    return handleNewFormat(mWait, mOff, mBusAt, mArr, mArrF, msg, isTest, raw, opts, silent);
+  }
+  // St Cecilia AM: "🚌 Stop 1: <name> reached." PM: "🚌 Stop A (5): <name> reached." (legacy)
   var mStop = msg.match(new RegExp('^' + BUS + ' Stop ([1-9A-I])(?: \\(\\d+\\))?:'));
+  var mStopLegacy = !mStop && msg.match(new RegExp('^' + BUS + ' Stop ([1-9A-I]) reached\\.'));
   var mFinal = msg.indexOf(BUS + ' Final stop reached:') === 0 ||
                msg.indexOf(BUS + ' Final stop reached (AM):') === 0 ||
                msg.indexOf(BUS + ' Final stop reached (PM):') === 0;
-  var silent = !!(opts && opts.silent);
   var r = route;
-  if (mStop) {
+  if (mStop || mStopLegacy) {
     var s = null;
-    var label = mStop[1];
-    // Auto-detect route from label: 1-5 = AM, A-E = PM.
+    var label = (mStop || mStopLegacy)[1];
+    // Auto-detect route from label: 1-9 = AM, A-I = PM.
     // Switch tabs if needed so the alert lands in the right place.
-    if (/^[1-5]$/.test(label)) {
+    if (/^[1-9]$/.test(label)) {
       r = 'AM';
-    } else if (/^[A-F]$/.test(label)) {
+    } else if (/^[A-I]$/.test(label)) {
       r = 'PM';
     }
     if (r !== route) setRoute(r);
     var list = routeStops(r);
     // Match by letter (AM: 1-5, PM: A-E)
     list.forEach(function (x) { if (x.letter === label) s = x; });
-    if (!s) { if (!silent) addLog('Unrecognized stop letter "' + mStop[1] + '": ' + raw, 'ST?', 'warn'); return false; }
+    if (!s) { if (!silent) addLog('Unrecognized stop letter "' + label + '": ' + raw, 'ST?', 'warn'); return false; }
     return applyArrival(r, s, isTest, raw, opts);
   } else if (mFinal) {
     // Auto-detect route from (AM)/(PM) tag in final message
@@ -837,10 +909,10 @@ function handleMessage(raw, opts) {
   }
 }
 
-function applyArrival(r, s, isTest, rawMsg, opts) {
+function applyArrival(r, s, isTest, rawMsg, opts, kind, devArg) {
   var devMatch = String(rawMsg || '').match(/\[([AiW][0-9]{2})\]\s*$/);
-  var devId = devMatch ? ' [' + devMatch[1] + ']' : '';
-  var dev = devMatch ? devMatch[1] : DEV_UNKNOWN;
+  var dev = devArg || (devMatch ? devMatch[1] : DEV_UNKNOWN);
+  var devId = (devArg || devMatch) ? ' [' + dev + ']' : '';
   registerDevice(dev);
   // Live mode: ignore previous-day alerts entirely (from ?since=24h backfill).
   // Record in history for the date picker, but don't touch live map/log state.
@@ -849,24 +921,110 @@ function applyArrival(r, s, isTest, rawMsg, opts) {
               torontoDateKey(evTime) !== torontoDateKey(new Date());
   var st = state[r], list = routeStops(r);
   var key = s.letter;
-  var added = recordEvent(r, s, isTest, rawMsg, false, opts && opts.time, opts && opts.deferUI, dev);
+  var added = recordEvent(r, s, isTest, rawMsg, false, opts && opts.time, opts && opts.deferUI, dev, kind || 'bus');
   if (viewDate) return added; // history mode: accumulate silently, don't touch the display
   if (opts && opts.silent) return added; // backfill: rendering deferred to the end
   if (isOld) return added; // previous-day event: history only, no live UI update
   st.reached[key] = true;
+  st.waiting = null; // boarded: clear any waiting state
   var idx = list.indexOf(s);
   if (idx > st.busIdx) st.busIdx = idx;
   st.lastUpdate = evTime;
   lastRoute = r;
   var dst = devRouteState(dev, r);
   dst.reached[key] = true;
+  dst.waiting = null;
   if (idx > dst.busIdx) dst.busIdx = idx;
   dst.lastUpdate = evTime;
   var label = 'Stop ' + s.letter;
-  if (isDevSelected(dev)) addLog((isTest ? '[TEST] ' : '') + 'Bus reached ' + label + devId +
-         (r !== route ? ' \u2014 switch to ' + r + ' to follow' : ''),
-         (isTest ? 'TEST ' : '') + r, isTest ? 'test' : r.toLowerCase(),
-         opts && opts.time);
+  if (isDevSelected(dev)) {
+    var logText = (kind === 'newbus' || kind === 'newarr')
+      ? ((isTest ? '[TEST] ' : '') + rawMsg) // verbatim: already has icon + device ID
+      : ((isTest ? '[TEST] ' : '') + 'Bus reached ' + label + devId +
+         (r !== route ? ' \u2014 switch to ' + r + ' to follow' : ''));
+    addLog(logText, (isTest ? 'TEST ' : '') + r, isTest ? 'test' : r.toLowerCase(), opts && opts.time);
+  }
+  if (r === route) renderRoute();
+  return added;
+}
+
+/* ===== New "My Stop" formats (v3.2+) ===== */
+function handleNewFormat(mWait, mOff, mBusAt, mArr, mArrF, msg, isTest, raw, opts, silent) {
+  var m = mWait || mOff || mBusAt || mArr || mArrF;
+  var dev = m[1];
+  registerDevice(dev);
+  var r = route, s = null;
+  if (mWait || mOff || mBusAt || mArr) {
+    var label = m[2];
+    r = /^[1-9]$/.test(label) ? 'AM' : 'PM';
+    routeStops(r).forEach(function (x) { if (x.letter === label) s = x; });
+    if (!s) { if (!silent) addLog('Unrecognized stop label "' + label + '": ' + raw, 'ST?', 'warn'); return false; }
+  } else {
+    r = lastRoute || route;
+    var fl = routeStops(r);
+    s = fl[fl.length - 1];
+  }
+  if (r !== route) setRoute(r);
+  if (mWait) return applyWaiting(r, s, dev, raw, opts, isTest);
+  if (mOff) return applyGotOff(r, s, dev, raw, opts, isTest);
+  if (mBusAt && /Route complete\.\s*$/.test(msg)) return applyFinalNew(r, dev, raw, opts, isTest);
+  if (mArrF) return applyFinalNew(r, dev, raw, opts, isTest);
+  return applyArrival(r, s, isTest, raw, opts, mArr ? 'newarr' : 'newbus', dev);
+}
+function applyWaiting(r, s, dev, rawMsg, opts, isTest) {
+  var evTime = (opts && opts.time) ? new Date(opts.time) : new Date();
+  var isOld = !viewDate && !(opts && opts.silent) &&
+              torontoDateKey(evTime) !== torontoDateKey(new Date());
+  var added = recordEvent(r, s, isTest, rawMsg, false, opts && opts.time, opts && opts.deferUI, dev, 'wait');
+  if (viewDate) return added; // history mode: accumulate silently, don't touch the display
+  if (opts && opts.silent) return added; // backfill: rendering deferred to the end
+  if (isOld) return added; // previous-day event: history only, no live UI update
+  lastRoute = r;
+  var st = state[r];
+  st.waiting = s.letter; st.lastUpdate = evTime;
+  var dst = devRouteState(dev, r);
+  dst.waiting = s.letter; dst.lastUpdate = evTime;
+  if (isDevSelected(dev)) addLog((isTest ? '[TEST] ' : '') + rawMsg,
+         (isTest ? 'TEST ' : '') + r, isTest ? 'test' : r.toLowerCase(), opts && opts.time);
+  if (r === route) renderRoute();
+  return added;
+}
+function applyGotOff(r, s, dev, rawMsg, opts, isTest) {
+  var evTime = (opts && opts.time) ? new Date(opts.time) : new Date();
+  var isOld = !viewDate && !(opts && opts.silent) &&
+              torontoDateKey(evTime) !== torontoDateKey(new Date());
+  var added = recordEvent(r, s, isTest, rawMsg, false, opts && opts.time, opts && opts.deferUI, dev, 'off');
+  if (viewDate) return added; // history mode: accumulate silently, don't touch the display
+  if (opts && opts.silent) return added; // backfill: rendering deferred to the end
+  if (isOld) return added; // previous-day event: history only, no live UI update
+  lastRoute = r;
+  var key = s.letter;
+  var st = state[r];
+  st.reached[key] = true; st.done = true; st.offStop = key; st.waiting = null; st.lastUpdate = evTime;
+  var dst = devRouteState(dev, r);
+  dst.reached[key] = true; dst.done = true; dst.offStop = key; dst.waiting = null; dst.lastUpdate = evTime;
+  if (isDevSelected(dev)) addLog((isTest ? '[TEST] ' : '') + rawMsg,
+         (isTest ? 'TEST ' : '') + r, isTest ? 'test' : r.toLowerCase(), opts && opts.time);
+  if (r === route) renderRoute();
+  return added;
+}
+function applyFinalNew(r, dev, rawMsg, opts, isTest) {
+  var list = routeStops(r);
+  var whenF = (opts && opts.time) ? new Date(opts.time) : new Date();
+  var added = recordEvent(r, list[list.length - 1], isTest, rawMsg, true,
+                          opts && opts.time, opts && opts.deferUI, dev, 'newfinal');
+  if (viewDate || (opts && opts.silent)) return added;
+  if (torontoDateKey(whenF) !== torontoDateKey(new Date())) return added;
+  var st = state[r];
+  st.complete = true; st.busIdx = list.length - 1; st.lastUpdate = whenF; st.waiting = null;
+  var keyF = stopKey(list[list.length - 1]);
+  st.reached[keyF] = true;
+  var dst = devRouteState(dev, r);
+  dst.complete = true; dst.busIdx = list.length - 1; dst.lastUpdate = whenF; dst.waiting = null;
+  dst.reached[keyF] = true;
+  lastRoute = r;
+  if (isDevSelected(dev)) addLog((isTest ? '[TEST] ' : '') + rawMsg,
+         (isTest ? 'TEST ' : '') + r, isTest ? 'test' : r.toLowerCase(), opts && opts.time);
   if (r === route) renderRoute();
   return added;
 }
@@ -924,8 +1082,12 @@ function logEntryFromEvent(r, ev) {
   });
   var label = 'Stop ' + ev.letter;
   var devTag = (ev.dev && ev.dev !== DEV_UNKNOWN) ? ' [' + ev.dev + ']' : '';
-  var txt = (ev.test ? '[TEST] ' : '') + (ev.final ? 'Final stop reached' : ('Bus reached ' + label)) + devTag;
-  var tagCls = ev.test ? 'test' : r.toLowerCase();
+  var txt, tagCls = ev.test ? 'test' : r.toLowerCase();
+  if (ev.kind === 'wait' || ev.kind === 'off' || ev.kind === 'newbus' || ev.kind === 'newarr' || ev.kind === 'newfinal') {
+    txt = (ev.test ? '[TEST] ' : '') + ev.msg; // verbatim: preserves icon + device ID
+  } else {
+    txt = (ev.test ? '[TEST] ' : '') + (ev.final ? 'Final stop reached' : ('Bus reached ' + label)) + devTag;
+  }
   d.innerHTML = '<span class="ts">' + esc(t) + '</span>' +
     '<span class="tag ' + tagCls + '">' + esc((ev.test ? 'TEST ' : '') + r) + '</span>' + esc(txt);
   return d;
@@ -995,10 +1157,7 @@ document.getElementById('clearHistory').addEventListener('click', function () {
   if (!confirm('Delete ALL stored ride history (up to 1 year)? This cannot be undone.')) return;
   try { localStorage.removeItem(HIST_KEY); } catch (e) {}
   // Reset live state too
-  state = {
-    AM: { reached: {}, busIdx: -1, complete: false, lastUpdate: null },
-    PM: { reached: {}, busIdx: -1, complete: false, lastUpdate: null }
-  };
+  state = { AM: freshRouteState(), PM: freshRouteState() };
   devStates = {};
   saveDevList(DEVLS_KNOWN, []);
   saveDevList(DEVLS_OFF, []);
