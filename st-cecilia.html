@@ -70,7 +70,7 @@
 </head>
 <body>
 <header>
-  <h1>&#x1F68C; St Cecilia Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v3.2</span></h1>
+  <h1>&#x1F68C; St Cecilia Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v3.3</span></h1>
   <div class="seg">
     <button id="btnAM" class="on">AM</button>
     <button id="btnPM">PM</button>
@@ -838,24 +838,24 @@ function disconnect() {
 function handleMessage(raw, opts) {
   var msg = String(raw), isTest = false;
   if (msg.indexOf(BELL + ' TEST:') === 0) { isTest = true; msg = msg.slice((BELL + ' TEST:').length).trim(); }
-  // New "My Stop" device-id-first formats (v3.2+):
+  // New "My Stop" device-id-first formats (v3.3+):
   //   📱 [A98] waiting at Stop 1: Mia.
   //   📱 [A98] got off at Stop I: Mia.
   //   🚌 [A98] at Stop 2: Walking.              -> advances like a stop arrival
   //   📱 [A98] arrived at Stop 2: Walking.      -> auto mode, advances
   //   🚌 [A98] at Stop 9: St. Cecilia. Route complete.
   //   📱 [A98] arrived at final stop: St. Cecilia.
-  var mWait = msg.match(new RegExp('^' + PHONE + ' \\[([AiW][0-9]{2})\\] waiting at Stop ([1-9A-I])(?: \\(\\d+\\))?:'));
-  var mOff  = msg.match(new RegExp('^' + PHONE + ' \\[([AiW][0-9]{2})\\] got off at Stop ([1-9A-I])(?: \\(\\d+\\))?:'));
-  var mBusAt = msg.match(new RegExp('^' + BUS + ' \\[([AiW][0-9]{2})\\] at Stop ([1-9A-I])(?: \\(\\d+\\))?:'));
-  var mArr  = msg.match(new RegExp('^' + PHONE + ' \\[([AiW][0-9]{2})\\] arrived at Stop ([1-9A-I])(?: \\(\\d+\\))?:'));
+  var mWait = msg.match(new RegExp('^' + PHONE + ' \\[([AiW][0-9]{2})\\] waiting at Stop ([1-9A-I])(?: \\(\\d+\\))?[:.]'));
+  var mOff  = msg.match(new RegExp('^' + PHONE + ' \\[([AiW][0-9]{2})\\] got off at Stop ([1-9A-I])(?: \\(\\d+\\))?[:.]'));
+  var mBusAt = msg.match(new RegExp('^' + BUS + ' \\[([AiW][0-9]{2})\\] at Stop ([1-9A-I])(?: \\(\\d+\\))?[:.]'));
+  var mArr  = msg.match(new RegExp('^' + PHONE + ' \\[([AiW][0-9]{2})\\] arrived at Stop ([1-9A-I])(?: \\(\\d+\\))?[:.]'));
   var mArrF = msg.match(new RegExp('^' + PHONE + ' \\[([AiW][0-9]{2})\\] arrived at final stop:'));
   var silent = !!(opts && opts.silent);
   if (mWait || mOff || mBusAt || mArr || mArrF) {
     return handleNewFormat(mWait, mOff, mBusAt, mArr, mArrF, msg, isTest, raw, opts, silent);
   }
   // St Cecilia AM: "🚌 Stop 1: <name> reached." PM: "🚌 Stop A (5): <name> reached." (legacy)
-  var mStop = msg.match(new RegExp('^' + BUS + ' Stop ([1-9A-I])(?: \\(\\d+\\))?:'));
+  var mStop = msg.match(new RegExp('^' + BUS + ' Stop ([1-9A-I])(?: \\(\\d+\\))?[:.]'));
   var mStopLegacy = !mStop && msg.match(new RegExp('^' + BUS + ' Stop ([1-9A-I]) reached\\.'));
   var mFinal = msg.indexOf(BUS + ' Final stop reached:') === 0 ||
                msg.indexOf(BUS + ' Final stop reached (AM):') === 0 ||
@@ -948,7 +948,7 @@ function applyArrival(r, s, isTest, rawMsg, opts, kind, devArg) {
   return added;
 }
 
-/* ===== New "My Stop" formats (v3.2+) ===== */
+/* ===== New "My Stop" formats (v3.3+) ===== */
 function handleNewFormat(mWait, mOff, mBusAt, mArr, mArrF, msg, isTest, raw, opts, silent) {
   var m = mWait || mOff || mBusAt || mArr || mArrF;
   var dev = m[1];
