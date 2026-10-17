@@ -70,7 +70,7 @@
 </head>
 <body>
 <header>
-  <h1>&#x1F68C; Bus Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v3.8</span></h1>
+  <h1>&#x1F68C; Bus Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v3.9</span></h1>
   <div class="seg">
     <button id="btnAM" class="on">AM</button>
     <button id="btnPM">PM</button>
@@ -484,7 +484,7 @@ function renderRoute() {
   } else if (st.waiting && st.busIdx < 0) {
     var agWait = stopByKey(route, st.waiting);
     if (agWait) busMarker = L.marker([agWait.lat, agWait.lng], {
-      icon: L.divIcon({ className: '', html: '<div class="waitlbl">\uD83D\uDCF1 Waiting for bus</div>', iconSize: [180, 32], iconAnchor: [90, -18] }),
+      icon: L.divIcon({ className: '', html: '<div style="text-align:center"><div class="phonedot">\uD83D\uDCF1</div><div class="devbuslbl">waiting \u00B7 ' + esc(stopShort(agWait)) + '</div></div>', iconSize: [110, 46], iconAnchor: [55, 14] }),
       zIndexOffset: 1000, interactive: false
     }).addTo(map).bindPopup('<b>Waiting for bus</b><br>' + esc(stopShort(agWait)));
   } else if (st.busIdx >= 0 && st.busIdx < list.length) {
@@ -517,7 +517,15 @@ function renderStatus() {
     sub.textContent = st.lastUpdate ? ('Last update: ' + st.lastUpdate.toLocaleTimeString()) : '';
   } else if (st.waiting && st.busIdx < 0) {
     var sWait = stopByKey(route, st.waiting);
-    line.textContent = '\uD83D\uDCF1 Waiting for bus at ' + (sWait ? stopShort(sWait) : 'Stop ' + st.waiting);
+    // Find which device is waiting for the ID
+    var waitDev = '';
+    try {
+      Object.keys(devices).forEach(function (d) {
+        var ds = devDisplayState(route, d);
+        if (ds.waiting && !waitDev) waitDev = devLabel(d);
+      });
+    } catch (e) {}
+    line.textContent = '\uD83D\uDCF1 ' + (waitDev ? '[' + waitDev + '] ' : '') + 'Waiting for bus at ' + (sWait ? stopShort(sWait) : 'Stop ' + st.waiting);
     sub.textContent = st.lastUpdate ? ('Last update: ' + st.lastUpdate.toLocaleTimeString()) : '';
   } else if (st.busIdx >= 0) {
     var s = list[st.busIdx];
