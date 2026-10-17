@@ -48,7 +48,6 @@
   .pin { width:28px; height:28px; border-radius:50%; background:#fff; border:2px solid var(--green); color:var(--green); display:grid; place-items:center; font-weight:800; font-size:.8rem; }
   .pin.done { background:var(--green); color:#fff; }
   .pin.next { box-shadow:0 0 0 4px rgba(53,208,127,.45); }
-  .pin.skipped { background:#e5e7eb; border-color:#9ca3af; color:#9ca3af; }
   .busdot { width:22px; height:22px; border-radius:50%; background:#2f8bff; border:3px solid #fff; box-shadow:0 0 0 3px rgba(47,139,255,.4), 0 2px 8px rgba(0,0,0,.5); }
   .arrivedlbl { background:var(--green); color:#fff; font-weight:800; font-size:15px; padding:5px 16px; border-radius:18px; text-align:center; white-space:nowrap; box-shadow:0 2px 6px rgba(0,0,0,.35); }
   .datebar { display:flex; align-items:center; gap:8px; padding:8px 14px; background:#0d1712; border-bottom:1px solid #223129; }
@@ -71,7 +70,7 @@
 </head>
 <body>
 <header>
-  <h1>&#x1F68C; Bus Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v4.1</span></h1>
+  <h1>&#x1F68C; Bus Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v4.0</span></h1>
   <div class="seg">
     <button id="btnAM" class="on">AM</button>
     <button id="btnPM">PM</button>
@@ -429,13 +428,8 @@ function renderRoute() {
   routeLine = L.polyline(path(), { color: '#0b6e4f', weight: 4, opacity: 0.9 }).addTo(map);
   pinLayer = L.layerGroup().addTo(map);
   var st = displayStateFor(route), list = stops();
-  var rideOver = st.complete || st.done;
   list.forEach(function (s, i) {
-    var key = stopKey(s);
-    var cls;
-    if (st.reached[key]) cls = 'done';
-    else if (rideOver) cls = 'skipped';  // ride ended early: grey out unvisited
-    else cls = (i === st.busIdx + 1 ? 'next' : '');
+    var cls = st.reached[stopKey(s)] ? 'done' : (i === st.busIdx + 1 && !st.complete ? 'next' : '');
     L.marker([s.lat, s.lng], { icon: pinIcon(s, cls) })
       .bindPopup('<b>' + stopShort(s) + '</b><br>' + esc(s.name))
       .addTo(pinLayer);
@@ -451,7 +445,7 @@ function renderRoute() {
         if (os) {
           var devOffText = '\uD83D\uDCF1 [' + devLabel(dev) + '] Off bus at ' + stopShort(os);
           busMarkers[dev] = L.marker([os.lat, os.lng], {
-            icon: L.divIcon({ className: '', html: '<div style="text-align:center"><div class="phonedot">\uD83D\uDCF1</div></div>', iconSize: [24, 24], iconAnchor: [12, 12] }),
+            icon: L.divIcon({ className: '', html: '<div class="gotofflbl">' + esc(devOffText) + '</div>', iconSize: [220, 32], iconAnchor: [110, -18] }),
             zIndexOffset: 1000
           }).addTo(map).bindPopup('<b>' + esc(devOffText) + '</b><br><i>Tracking stopped</i>');
         }
@@ -486,11 +480,12 @@ function renderRoute() {
     var agOff = stopByKey(route, st.offStop);
     var agOffText = '\uD83D\uDCF1 Off bus at ' + (agOff ? stopShort(agOff) : 'Stop ' + st.offStop);
     if (agOff) busMarker = L.marker([agOff.lat, agOff.lng], {
-      icon: L.divIcon({ className: '', html: '<div style="text-align:center"><div class="phonedot">\uD83D\uDCF1</div></div>', iconSize: [24, 24], iconAnchor: [12, 12] }),
+      icon: L.divIcon({ className: '', html: '<div class="gotofflbl">' + esc(agOffText) + '</div>', iconSize: [220, 32], iconAnchor: [110, -18] }),
       zIndexOffset: 1000, interactive: false
     }).addTo(map).bindPopup('<b>' + esc(agOffText) + '</b><br><i>Tracking stopped</i>');
   } else if (st.waiting && st.busIdx < 0) {
     var agWait = stopByKey(route, st.waiting);
+    // Find waiting device for the ID (same as status line)
     var waitDevLbl = '';
     try {
       Object.keys(devices).forEach(function (d) {
@@ -500,7 +495,7 @@ function renderRoute() {
     } catch (e) {}
     var waitText = '\uD83D\uDCF1 ' + (waitDevLbl ? '[' + waitDevLbl + '] ' : '') + 'Waiting for bus at ' + (agWait ? stopShort(agWait) : 'Stop ' + st.waiting);
     if (agWait) busMarker = L.marker([agWait.lat, agWait.lng], {
-      icon: L.divIcon({ className: '', html: '<div style="text-align:center"><div class="phonedot" style="background:#b45309">\uD83D\uDCF1</div></div>', iconSize: [24, 24], iconAnchor: [12, 12] }),
+      icon: L.divIcon({ className: '', html: '<div class="waitlbl">' + esc(waitText) + '</div>', iconSize: [220, 32], iconAnchor: [110, -18] }),
       zIndexOffset: 1000, interactive: false
     }).addTo(map).bindPopup('<b>' + esc(waitText) + '</b>');
   } else if (st.busIdx >= 0 && st.busIdx < list.length) {
@@ -529,7 +524,7 @@ function renderStatus() {
     sub.textContent = st.lastUpdate ? ('Last update: ' + st.lastUpdate.toLocaleTimeString()) : '';
   } else if (st.done && st.offStop) {
     var sOff = stopByKey(route, st.offStop);
-    line.textContent = '\uD83D\uDCF1 Off bus at ' + (sOff ? stopShort(sOff) : 'Stop ' + st.offStop);
+    line.textContent = '\uD83D\uDCF1 Got off bus at ' + (sOff ? stopShort(sOff) : 'Stop ' + st.offStop);
     sub.textContent = st.lastUpdate ? ('Last update: ' + st.lastUpdate.toLocaleTimeString()) : '';
   } else if (st.waiting && st.busIdx < 0) {
     var sWait = stopByKey(route, st.waiting);
