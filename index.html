@@ -48,6 +48,7 @@
   .pin { width:28px; height:28px; border-radius:50%; background:#fff; border:2px solid var(--green); color:var(--green); display:grid; place-items:center; font-weight:800; font-size:.8rem; }
   .pin.done { background:var(--green); color:#fff; }
   .pin.next { box-shadow:0 0 0 4px rgba(53,208,127,.45); }
+  .pin.skipped { background:#e5e7eb; border-color:#9ca3af; color:#9ca3af; }
   .busdot { width:22px; height:22px; border-radius:50%; background:#2f8bff; border:3px solid #fff; box-shadow:0 0 0 3px rgba(47,139,255,.4), 0 2px 8px rgba(0,0,0,.5); }
   .arrivedlbl { background:var(--green); color:#fff; font-weight:800; font-size:15px; padding:5px 16px; border-radius:18px; text-align:center; white-space:nowrap; box-shadow:0 2px 6px rgba(0,0,0,.35); }
   .datebar { display:flex; align-items:center; gap:8px; padding:8px 14px; background:#0d1712; border-bottom:1px solid #223129; }
@@ -63,14 +64,14 @@
   .devdot { width:14px; height:14px; border-radius:50%; flex:none; }
   .devhint { color:var(--mut); font-size:.85rem; padding:6px 0; }
   .devbuslbl { background:rgba(0,0,0,.7); color:#fff; font-size:11px; font-weight:800; padding:1px 7px; border-radius:10px; text-align:center; white-space:nowrap; margin-top:2px; }
-  .waitlbl { background:#b45309; color:#fff; font-weight:800; font-size:15px; padding:5px 16px; border-radius:18px; text-align:center; white-space:nowrap; box-shadow:0 2px 6px rgba(0,0,0,.35); }
-  .gotofflbl { background:#475569; color:#fff; font-weight:800; font-size:15px; padding:5px 16px; border-radius:18px; text-align:center; white-space:nowrap; box-shadow:0 2px 6px rgba(0,0,0,.35); }
+  .waitlbl { background:#b45309; color:#fff; font-weight:700; font-size:12px; padding:5px 16px; border-radius:18px; text-align:center; white-space:nowrap; box-shadow:0 2px 6px rgba(0,0,0,.35); }
+  .gotofflbl { background:#475569; color:#fff; font-weight:700; font-size:12px; padding:5px 16px; border-radius:18px; text-align:center; white-space:nowrap; box-shadow:0 2px 6px rgba(0,0,0,.35); }
   .phonedot { width:22px; height:22px; border-radius:50%; background:#35d07f; border:3px solid #fff; box-shadow:0 0 0 3px rgba(53,208,127,.4), 0 2px 8px rgba(0,0,0,.5); display:grid; place-items:center; font-size:12px; }
 </style>
 </head>
 <body>
 <header>
-  <h1>&#x1F68C; Bus Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v4.0</span></h1>
+  <h1>&#x1F68C; Bus Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v4.1</span></h1>
   <div class="seg">
     <button id="btnAM" class="on">AM</button>
     <button id="btnPM">PM</button>
@@ -428,8 +429,13 @@ function renderRoute() {
   routeLine = L.polyline(path(), { color: '#0b6e4f', weight: 4, opacity: 0.9 }).addTo(map);
   pinLayer = L.layerGroup().addTo(map);
   var st = displayStateFor(route), list = stops();
+  var rideOver = st.complete || st.done;
   list.forEach(function (s, i) {
-    var cls = st.reached[stopKey(s)] ? 'done' : (i === st.busIdx + 1 && !st.complete ? 'next' : '');
+    var key = stopKey(s);
+    var cls;
+    if (st.reached[key]) cls = 'done';
+    else if (rideOver) cls = 'skipped';
+    else cls = (i === st.busIdx + 1 ? 'next' : '');
     L.marker([s.lat, s.lng], { icon: pinIcon(s, cls) })
       .bindPopup('<b>' + stopShort(s) + '</b><br>' + esc(s.name))
       .addTo(pinLayer);
