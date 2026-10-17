@@ -70,7 +70,7 @@
 </head>
 <body>
 <header>
-  <h1>&#x1F68C; Bus Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v3.9</span></h1>
+  <h1>&#x1F68C; Bus Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v4.0</span></h1>
   <div class="seg">
     <button id="btnAM" class="on">AM</button>
     <button id="btnPM">PM</button>
@@ -443,21 +443,22 @@ function renderRoute() {
       if (ds.done && ds.offStop) {
         var os = stopByKey(route, ds.offStop);
         if (os) {
-          // Clean: small phone badge on the pin, no big overlay label
+          var devOffText = '\uD83D\uDCF1 [' + devLabel(dev) + '] Off bus at ' + stopShort(os);
           busMarkers[dev] = L.marker([os.lat, os.lng], {
-            icon: L.divIcon({ className: '', html: '<div style="text-align:center"><div class="phonedot">\uD83D\uDCF1</div><div class="devbuslbl">' + esc(devLabel(dev)) + ' \u00B7 off bus</div></div>', iconSize: [70, 46], iconAnchor: [35, 14] }),
+            icon: L.divIcon({ className: '', html: '<div class="gotofflbl">' + esc(devOffText) + '</div>', iconSize: [220, 32], iconAnchor: [110, -18] }),
             zIndexOffset: 1000
-          }).addTo(map).bindPopup('<b>Off bus [' + esc(devLabel(dev)) + ']</b><br>' + esc(stopShort(os)) + '<br><i>Tracking stopped</i>');
+          }).addTo(map).bindPopup('<b>' + esc(devOffText) + '</b><br><i>Tracking stopped</i>');
         }
         return;
       }
       if (ds.waiting && ds.busIdx < 0) {
         var ws = stopByKey(route, ds.waiting);
         if (ws) {
+          var devWaitText = '\uD83D\uDCF1 [' + devLabel(dev) + '] Waiting for bus at ' + stopShort(ws);
           busMarkers[dev] = L.marker([ws.lat, ws.lng], {
-            icon: L.divIcon({ className: '', html: '<div style="text-align:center"><div class="phonedot">\uD83D\uDCF1</div><div class="devbuslbl">' + esc(devLabel(dev)) + ' \u00B7 waiting</div></div>', iconSize: [70, 46], iconAnchor: [35, 14] }),
+            icon: L.divIcon({ className: '', html: '<div class="waitlbl">' + esc(devWaitText) + '</div>', iconSize: [220, 32], iconAnchor: [110, -18] }),
             zIndexOffset: 1000
-          }).addTo(map).bindPopup('<b>Waiting for bus [' + esc(devLabel(dev)) + ']</b><br>' + esc(stopShort(ws)));
+          }).addTo(map).bindPopup('<b>' + esc(devWaitText) + '</b>');
         }
         return;
       }
@@ -477,16 +478,26 @@ function renderRoute() {
     }).addTo(map);
   } else if (st.done && st.offStop) {
     var agOff = stopByKey(route, st.offStop);
+    var agOffText = '\uD83D\uDCF1 Off bus at ' + (agOff ? stopShort(agOff) : 'Stop ' + st.offStop);
     if (agOff) busMarker = L.marker([agOff.lat, agOff.lng], {
-      icon: L.divIcon({ className: '', html: '<div style="text-align:center"><div class="phonedot">\uD83D\uDCF1</div><div class="devbuslbl">off bus</div></div>', iconSize: [70, 46], iconAnchor: [35, 14] }),
+      icon: L.divIcon({ className: '', html: '<div class="gotofflbl">' + esc(agOffText) + '</div>', iconSize: [220, 32], iconAnchor: [110, -18] }),
       zIndexOffset: 1000, interactive: false
-    }).addTo(map).bindPopup('<b>Off bus</b><br>' + esc(stopShort(agOff)) + '<br><i>Tracking stopped</i>');
+    }).addTo(map).bindPopup('<b>' + esc(agOffText) + '</b><br><i>Tracking stopped</i>');
   } else if (st.waiting && st.busIdx < 0) {
     var agWait = stopByKey(route, st.waiting);
+    // Find waiting device for the ID (same as status line)
+    var waitDevLbl = '';
+    try {
+      Object.keys(devices).forEach(function (d) {
+        var dds = devDisplayState(route, d);
+        if (dds.waiting && !waitDevLbl) waitDevLbl = devLabel(d);
+      });
+    } catch (e) {}
+    var waitText = '\uD83D\uDCF1 ' + (waitDevLbl ? '[' + waitDevLbl + '] ' : '') + 'Waiting for bus at ' + (agWait ? stopShort(agWait) : 'Stop ' + st.waiting);
     if (agWait) busMarker = L.marker([agWait.lat, agWait.lng], {
-      icon: L.divIcon({ className: '', html: '<div style="text-align:center"><div class="phonedot">\uD83D\uDCF1</div><div class="devbuslbl">waiting \u00B7 ' + esc(stopShort(agWait)) + '</div></div>', iconSize: [110, 46], iconAnchor: [55, 14] }),
+      icon: L.divIcon({ className: '', html: '<div class="waitlbl">' + esc(waitText) + '</div>', iconSize: [220, 32], iconAnchor: [110, -18] }),
       zIndexOffset: 1000, interactive: false
-    }).addTo(map).bindPopup('<b>Waiting for bus</b><br>' + esc(stopShort(agWait)));
+    }).addTo(map).bindPopup('<b>' + esc(waitText) + '</b>');
   } else if (st.busIdx >= 0 && st.busIdx < list.length) {
     var b = list[st.busIdx];
     busMarker = L.marker([b.lat, b.lng], {
