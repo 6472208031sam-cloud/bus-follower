@@ -71,7 +71,7 @@
 </head>
 <body>
 <header>
-  <h1>&#x1F68C; Bus Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v4.8</span></h1>
+  <h1>&#x1F68C; Bus Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v4.9</span></h1>
   <div class="seg">
     <button id="btnAM" class="on">AM</button>
     <button id="btnPM">PM</button>
@@ -930,9 +930,26 @@ function handleMessage(raw, opts) {
     addLog('\uD83D\uDCF1 [' + _devOb + '] on bus \u2014 heading to Stop ' + _stopNum + '.', 'AM', '');
     try {
       var _ds = devRouteState(_devOb, 'AM');
-      if (_ds) { _ds.waiting = null; _ds.onBus = { stop: _stopNum, time: new Date() }; }
+      if (_ds) {
+        // Mark the waiting stop as reached (boarded the bus there)
+        if (_ds.waiting) {
+          _ds.reached[_ds.waiting] = true;
+          var _wIdx = -1;
+          try { _wIdx = AM_STOPS.findIndex(function(s) { return String(s.n) === String(_ds.waiting); }); } catch (e) {}
+          if (_wIdx > _ds.busIdx) _ds.busIdx = _wIdx;
+        }
+        _ds.waiting = null; _ds.onBus = { stop: _stopNum, time: new Date() };
+      }
       // Clear aggregate waiting too (map banner reads state.AM.waiting)
-      if (typeof state !== 'undefined' && state.AM) { state.AM.waiting = null; state.AM.onBus = { stop: _stopNum, time: new Date() }; }
+      if (typeof state !== 'undefined' && state.AM) {
+        if (state.AM.waiting) {
+          state.AM.reached[state.AM.waiting] = true;
+          var _awIdx = -1;
+          try { _awIdx = AM_STOPS.findIndex(function(s) { return String(s.n) === String(state.AM.waiting); }); } catch (e) {}
+          if (_awIdx > state.AM.busIdx) state.AM.busIdx = _awIdx;
+        }
+        state.AM.waiting = null; state.AM.onBus = { stop: _stopNum, time: new Date() };
+      }
     } catch (e) {}
     try { renderRoute(); renderStatus(); } catch (e) {}
     return true;
