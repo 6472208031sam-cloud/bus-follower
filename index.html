@@ -71,7 +71,7 @@
 </head>
 <body>
 <header>
-  <h1>&#x1F68C; Bus Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v4.2</span></h1>
+  <h1>&#x1F68C; Bus Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v4.3</span></h1>
   <div class="seg">
     <button id="btnAM" class="on">AM</button>
     <button id="btnPM">PM</button>
@@ -393,7 +393,8 @@ function getDisplayState(r) {
 // Used to suppress the aggregate "off bus" banner/grey-out while another
 // phone is still riding.
 function allDevicesDone(r) {
-  var devs = Object.keys(devices || {});
+  var devs = [];
+  try { devs = knownDevices() || []; } catch (e) {}
   if (!devs.length) return true;
   for (var i = 0; i < devs.length; i++) {
     var ds = devDisplayState(r, devs[i]);
@@ -510,7 +511,7 @@ function renderRoute() {
     // Find waiting device for the ID (same as status line)
     var waitDevLbl = '';
     try {
-      Object.keys(devices).forEach(function (d) {
+      (function(){ try { return knownDevices() || []; } catch(e){ return []; } })().forEach(function (d) {
         var dds = devDisplayState(route, d);
         if (dds.waiting && !waitDevLbl) waitDevLbl = devLabel(d);
       });
@@ -548,7 +549,9 @@ function renderStatus() {
     if (!allDevicesDone(route)) {
       // Another phone still riding: show its progress instead.
       var activeBest = null, activeDev = null, activeFrac = -1;
-      Object.keys(devices || {}).forEach(function (d) {
+      var _devs2 = [];
+      try { _devs2 = knownDevices() || []; } catch (e) {}
+      _devs2.forEach(function (d) {
         var ads = devDisplayState(route, d);
         if (ads.done || ads.complete) return;
         var adone = Object.keys(ads.reached).length;
@@ -574,7 +577,7 @@ function renderStatus() {
     // Find which device is waiting for the ID
     var waitDev = '';
     try {
-      Object.keys(devices).forEach(function (d) {
+      (function(){ try { return knownDevices() || []; } catch(e){ return []; } })().forEach(function (d) {
         var ds = devDisplayState(route, d);
         if (ds.waiting && !waitDev) waitDev = devLabel(d);
       });
