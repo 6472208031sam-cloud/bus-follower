@@ -71,7 +71,7 @@
 </head>
 <body>
 <header>
-  <h1>&#x1F68C; Bus Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v4.9</span></h1>
+  <h1>&#x1F68C; Bus Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v5.0</span></h1>
   <div class="seg">
     <button id="btnAM" class="on">AM</button>
     <button id="btnPM">PM</button>
@@ -536,7 +536,7 @@ function renderRoute() {
       icon: L.divIcon({ className: '', html: '<div class="waitlbl">' + esc(waitText) + '</div>', iconSize: [220, 32], iconAnchor: [110, -18] }),
       zIndexOffset: 1000, interactive: false
     }).addTo(map).bindPopup('<b>' + esc(waitText) + '</b>');
-  } else if (st.onBus && st.busIdx < 0) {
+  } else if (st.onBus && !st.reached[String(st.onBus.stop)]) {
     var onBusStop = stopByKey(route, String(st.onBus.stop));
     var onBusDevLbl = '';
     try {
@@ -1041,6 +1041,7 @@ function applyArrival(r, s, isTest, rawMsg, opts, kind, devArg) {
   if (isOld) return added; // previous-day event: history only, no live UI update
   st.reached[key] = true;
   st.waiting = null; // boarded: clear any waiting state
+  st.onBus = null; // arrived: clear on-bus state
   var idx = list.indexOf(s);
   if (idx > st.busIdx) st.busIdx = idx;
   st.lastUpdate = evTime;
@@ -1048,6 +1049,7 @@ function applyArrival(r, s, isTest, rawMsg, opts, kind, devArg) {
   var dst = devRouteState(dev, r);
   dst.reached[key] = true;
   dst.waiting = null;
+  dst.onBus = null;
   if (idx > dst.busIdx) dst.busIdx = idx;
   dst.lastUpdate = evTime;
   var label = r === 'AM' ? ('Stop ' + s.n) : ('Stop ' + s.letter + ' (' + s.am + ')');
