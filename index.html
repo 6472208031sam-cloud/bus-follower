@@ -914,6 +914,8 @@ function handleMessage(raw, opts) {
     try {
       var _ds = devRouteState(_devOb, 'AM');
       if (_ds) { _ds.waiting = null; }
+      // Clear aggregate waiting too (map banner reads state.AM.waiting)
+      if (typeof state !== 'undefined' && state.AM) { state.AM.waiting = null; }
     } catch (e) {}
     try { renderRoute(); renderStatus(); } catch (e) {}
     return true;
