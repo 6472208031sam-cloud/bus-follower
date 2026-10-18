@@ -48,6 +48,7 @@
   .pin { width:28px; height:28px; border-radius:50%; background:#fff; border:2px solid var(--green); color:var(--green); display:grid; place-items:center; font-weight:800; font-size:.8rem; }
   .pin.done { background:var(--green); color:#fff; }
   .pin.next { box-shadow:0 0 0 4px rgba(53,208,127,.45); }
+  .pin.skipped { background:#e5e7eb; border-color:#9ca3af; color:#9ca3af; }
   .busdot { width:22px; height:22px; border-radius:50%; background:#2f8bff; border:3px solid #fff; box-shadow:0 0 0 3px rgba(47,139,255,.4), 0 2px 8px rgba(0,0,0,.5); }
   .arrivedlbl { background:var(--green); color:#fff; font-weight:800; font-size:15px; padding:5px 16px; border-radius:18px; text-align:center; white-space:nowrap; box-shadow:0 2px 6px rgba(0,0,0,.35); }
   .datebar { display:flex; align-items:center; gap:8px; padding:8px 14px; background:#0d1712; border-bottom:1px solid #223129; }
@@ -63,14 +64,14 @@
   .devdot { width:14px; height:14px; border-radius:50%; flex:none; }
   .devhint { color:var(--mut); font-size:.85rem; padding:6px 0; }
   .devbuslbl { background:rgba(0,0,0,.7); color:#fff; font-size:11px; font-weight:800; padding:1px 7px; border-radius:10px; text-align:center; white-space:nowrap; margin-top:2px; }
-  .waitlbl { background:#b45309; color:#fff; font-weight:800; font-size:15px; padding:5px 16px; border-radius:18px; text-align:center; white-space:nowrap; box-shadow:0 2px 6px rgba(0,0,0,.35); }
-  .gotofflbl { background:#475569; color:#fff; font-weight:800; font-size:15px; padding:5px 16px; border-radius:18px; text-align:center; white-space:nowrap; box-shadow:0 2px 6px rgba(0,0,0,.35); }
+  .waitlbl { background:#b45309; color:#fff; font-weight:700; font-size:12px; padding:5px 16px; border-radius:18px; text-align:center; white-space:nowrap; box-shadow:0 2px 6px rgba(0,0,0,.35); }
+  .gotofflbl { background:#475569; color:#fff; font-weight:700; font-size:12px; padding:5px 16px; border-radius:18px; text-align:center; white-space:nowrap; box-shadow:0 2px 6px rgba(0,0,0,.35); }
   .phonedot { width:22px; height:22px; border-radius:50%; background:#35d07f; border:3px solid #fff; box-shadow:0 0 0 3px rgba(53,208,127,.4), 0 2px 8px rgba(0,0,0,.5); display:grid; place-items:center; font-size:12px; }
 </style>
 </head>
 <body>
 <header>
-  <h1>&#x1F68C; St Cecilia Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v3.6</span></h1>
+  <h1>&#x1F68C; St Cecilia Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v3.7</span></h1>
   <div class="seg">
     <button id="btnAM" class="on">AM</button>
     <button id="btnPM">PM</button>
@@ -415,6 +416,27 @@ function getDisplayState(r) {
   if (!day) return freshRouteState();
   return stateFromEvents(r, (r === 'AM' ? day.am : day.pm) || []);
 }
+// True if the device has any activity on this route (not just a fresh empty state).
+function deviceParticipated(r, dev) {
+  var ds = devDisplayState(r, dev);
+  return Object.keys(ds.reached || {}).length > 0 ||
+         ds.busIdx >= 0 ||
+         ds.waiting !== null ||
+         ds.done ||
+         ds.complete;
+}
+// Returns true if every participating device is done (got off or route complete).
+function allDevicesDone(r) {
+  var devs = [];
+  try { devs = knownDevices() || []; } catch (e) {}
+  var participants = devs.filter(function (d) { return deviceParticipated(r, d); });
+  if (!participants.length) return true;
+  for (var i = 0; i < participants.length; i++) {
+    var ds = devDisplayState(r, participants[i]);
+    if (!ds.done && !ds.complete) return false;
+  }
+  return true;
+}
 function restoreToday() {
   var today = torontoDateKey(new Date());
   var h = loadHistory();
@@ -454,8 +476,13 @@ function renderRoute() {
   routeLine = L.polyline(path(), { color: '#0b6e4f', weight: 4, opacity: 0.9 }).addTo(map);
   pinLayer = L.layerGroup().addTo(map);
   var st = displayStateFor(route), list = stops();
+  var rideOver = (st.complete || st.done) && allDevicesDone(route);
   list.forEach(function (s, i) {
-    var cls = st.reached[stopKey(s)] ? 'done' : (i === st.busIdx + 1 && !st.complete ? 'next' : '');
+    var key = stopKey(s);
+    var cls;
+    if (st.reached[key]) cls = 'done';
+    else if (rideOver) cls = 'skipped';
+    else cls = (i === st.busIdx + 1 ? 'next' : '');
     L.marker([s.lat, s.lng], { icon: pinIcon(s, cls) })
       .bindPopup('<b>' + stopShort(s) + '</b><br>' + esc(s.name))
       .addTo(pinLayer);
@@ -500,12 +527,13 @@ function renderRoute() {
       icon: L.divIcon({ className: '', html: '<div class="arrivedlbl">\u2713 Arrived</div>', iconSize: [110, 32], iconAnchor: [55, -18] }),
       zIndexOffset: 1000, interactive: false
     }).addTo(map);
-  } else if (st.done && st.offStop) {
+  } else if (st.done && st.offStop && allDevicesDone(route)) {
     var agOff = stopByKey(route, st.offStop);
+    var agOffText = '\uD83D\uDCF1 Off bus at ' + (agOff ? stopShort(agOff) : 'Stop ' + st.offStop);
     if (agOff) busMarker = L.marker([agOff.lat, agOff.lng], {
-      icon: L.divIcon({ className: '', html: '<div class="gotofflbl">\u2713 Got off bus</div>', iconSize: [150, 32], iconAnchor: [75, -18] }),
+      icon: L.divIcon({ className: '', html: '<div class="gotofflbl">' + esc(agOffText) + '</div>', iconSize: [220, 32], iconAnchor: [110, -18] }),
       zIndexOffset: 1000, interactive: false
-    }).addTo(map).bindPopup('<b>Got off bus</b><br>' + esc(stopShort(agOff)));
+    }).addTo(map).bindPopup('<b>' + esc(agOffText) + '</b><br><i>Tracking stopped</i>');
   } else if (st.waiting && st.busIdx < 0) {
     var agWait = stopByKey(route, st.waiting);
     if (agWait) busMarker = L.marker([agWait.lat, agWait.lng], {
@@ -537,9 +565,32 @@ function renderStatus() {
     line.textContent = 'Route complete \u2014 bus reached the final stop';
     sub.textContent = st.lastUpdate ? ('Last update: ' + st.lastUpdate.toLocaleTimeString()) : '';
   } else if (st.done && st.offStop) {
-    var sOff = stopByKey(route, st.offStop);
-    line.textContent = '\uD83D\uDCF1 Got off bus at ' + (sOff ? stopShort(sOff) : 'Stop ' + st.offStop);
-    sub.textContent = st.lastUpdate ? ('Last update: ' + st.lastUpdate.toLocaleTimeString()) : '';
+    if (!allDevicesDone(route)) {
+      var activeBest = null, activeDev = null, activeFrac = -1;
+      var _pdevs = [];
+      try { _pdevs = knownDevices() || []; } catch (e) {}
+      _pdevs.forEach(function (d) {
+        if (!deviceParticipated(route, d)) return;
+        var ads = devDisplayState(route, d);
+        if (ads.done || ads.complete) return;
+        var adone = Object.keys(ads.reached).length;
+        var afrac = list.length ? adone / list.length : 0;
+        if (afrac > activeFrac) { activeBest = ads; activeDev = d; activeFrac = afrac; }
+      });
+      if (activeBest && activeBest.busIdx >= 0 && activeBest.busIdx < list.length) {
+        var abb = list[activeBest.busIdx];
+        line.textContent = '\uD83D\uDE8C [' + devLabel(activeDev) + '] at ' + stopShort(abb);
+        sub.textContent = activeBest.lastUpdate ? ('Last update: ' + activeBest.lastUpdate.toLocaleTimeString()) : '';
+      } else {
+        var sOff2 = stopByKey(route, st.offStop);
+        line.textContent = '\uD83D\uDCF1 Off bus at ' + (sOff2 ? stopShort(sOff2) : 'Stop ' + st.offStop);
+        sub.textContent = st.lastUpdate ? ('Last update: ' + st.lastUpdate.toLocaleTimeString()) : '';
+      }
+    } else {
+      var sOff = stopByKey(route, st.offStop);
+      line.textContent = '\uD83D\uDCF1 Off bus at ' + (sOff ? stopShort(sOff) : 'Stop ' + st.offStop);
+      sub.textContent = 'Tracking stopped' + (st.lastUpdate ? (' \u00B7 ' + st.lastUpdate.toLocaleTimeString()) : '');
+    }
   } else if (st.waiting && st.busIdx < 0) {
     var sWait = stopByKey(route, st.waiting);
     line.textContent = '\uD83D\uDCF1 Waiting for bus at ' + (sWait ? stopShort(sWait) : 'Stop ' + st.waiting);
@@ -851,6 +902,14 @@ function handleMessage(raw, opts) {
   var mBusAt = msg.match(new RegExp('^' + BUS + ' \\[([AiW][0-9]{2})\\] at Stop ([1-9A-I])(?: \\(\\d+\\))?[:.]'));
   var mArr  = msg.match(new RegExp('^' + PHONE + ' \\[([AiW][0-9]{2})\\] arrived at Stop ([1-9A-I])(?: \\(\\d+\\))?[:.]'));
   var mArrF = msg.match(new RegExp('^' + PHONE + ' \\[([AiW][0-9]{2})\\] arrived at final stop:'));
+  // "📱 [A30] off bus. Tracking stopped." -> info only
+  var mOffBus = msg.match(new RegExp('^' + PHONE + ' \\[([AiW][0-9]{2})\\] off bus\\. Tracking stopped\\.'));
+  if (mOffBus) {
+    var _dev = mOffBus[1];
+    registerDevice(_dev);
+    addLog('\uD83D\uDCF1 [' + _dev + '] off bus \u2014 tracking stopped.', 'PM', '');
+    return true;
+  }
   var silent = !!(opts && opts.silent);
   if (mWait || mOff || mBusAt || mArr || mArrF) {
     return handleNewFormat(mWait, mOff, mBusAt, mArr, mArrF, msg, isTest, raw, opts, silent);
