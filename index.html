@@ -71,7 +71,7 @@
 </head>
 <body>
 <header>
-  <h1>&#x1F68C; Bus Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v4.3</span></h1>
+  <h1>&#x1F68C; Bus Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v4.4</span></h1>
   <div class="seg">
     <button id="btnAM" class="on">AM</button>
     <button id="btnPM">PM</button>
@@ -392,12 +392,24 @@ function getDisplayState(r) {
 // Returns true if every tracked device is done (got off or route complete).
 // Used to suppress the aggregate "off bus" banner/grey-out while another
 // phone is still riding.
+// True if the device has any activity on this route (not just a fresh empty state).
+// A phone that only did AM should not block the PM banner.
+function deviceParticipated(r, dev) {
+  var ds = devDisplayState(r, dev);
+  return Object.keys(ds.reached || {}).length > 0 ||
+         ds.busIdx >= 0 ||
+         ds.waiting !== null ||
+         ds.done ||
+         ds.complete;
+}
 function allDevicesDone(r) {
   var devs = [];
   try { devs = knownDevices() || []; } catch (e) {}
-  if (!devs.length) return true;
-  for (var i = 0; i < devs.length; i++) {
-    var ds = devDisplayState(r, devs[i]);
+  // Only count devices that actually participated in THIS route
+  var participants = devs.filter(function (d) { return deviceParticipated(r, d); });
+  if (!participants.length) return true;
+  for (var i = 0; i < participants.length; i++) {
+    var ds = devDisplayState(r, participants[i]);
     if (!ds.done && !ds.complete) return false;
   }
   return true;
@@ -552,6 +564,7 @@ function renderStatus() {
       var _devs2 = [];
       try { _devs2 = knownDevices() || []; } catch (e) {}
       _devs2.forEach(function (d) {
+        if (!deviceParticipated(route, d)) return;
         var ads = devDisplayState(route, d);
         if (ads.done || ads.complete) return;
         var adone = Object.keys(ads.reached).length;
