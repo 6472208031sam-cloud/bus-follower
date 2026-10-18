@@ -71,7 +71,7 @@
 </head>
 <body>
 <header>
-  <h1>&#x1F68C; Bus Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v4.5</span></h1>
+  <h1>&#x1F68C; Bus Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v4.6</span></h1>
   <div class="seg">
     <button id="btnAM" class="on">AM</button>
     <button id="btnPM">PM</button>
@@ -904,6 +904,20 @@ function handleMessage(raw, opts) {
   var mArrF2 = msg.match(new RegExp('^' + PHONE + ' \\[([AiW][0-9]{2})\\] arrived at final stop \\((AM|PM)\\)'));
   var mBusF = msg.match(new RegExp('^' + BUS + ' \\[([AiW][0-9]{2})\\] at final stop \\((AM|PM)\\)'));
   // "📱 [A30] off bus. Tracking stopped." -> info only, state already set by got-off
+  // "📱 [X##] on bus, heading to Stop N: ..." -> parse and clear waiting
+  var mOnBus = msg.match(new RegExp('^' + PHONE + ' \\[([AiW][0-9]{2})\\] on bus, heading to Stop (\\d+):'));
+  if (mOnBus) {
+    var _devOb = mOnBus[1];
+    var _stopNum = mOnBus[2];
+    registerDevice(_devOb);
+    addLog('\uD83D\uDCF1 [' + _devOb + '] on bus \u2014 heading to Stop ' + _stopNum + '.', 'AM', '');
+    try {
+      var _ds = devRouteState(_devOb, 'AM');
+      if (_ds) { _ds.waiting = null; }
+    } catch (e) {}
+    try { renderRoute(); renderStatus(); } catch (e) {}
+    return true;
+  }
   var mOffBus = msg.match(new RegExp('^' + PHONE + ' \\[([AiW][0-9]{2})\\] off bus\\. Tracking stopped\\.'));
   if (mOffBus) {
     var _dev = mOffBus[1];
