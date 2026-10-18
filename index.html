@@ -71,7 +71,7 @@
 </head>
 <body>
 <header>
-  <h1>&#x1F68C; Bus Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v4.7</span></h1>
+  <h1>&#x1F68C; Bus Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v4.8</span></h1>
   <div class="seg">
     <button id="btnAM" class="on">AM</button>
     <button id="btnPM">PM</button>
@@ -304,6 +304,9 @@ function renderStatusFiltered(list) {
     line.textContent = 'Bus at ' + stopShort(s) + ' of ' + list.length + ' [' + devLabel(bestDev) + ']';
     sub.textContent = (route === 'AM' && s.t ? s.t + ' \u00B7 ' : '') +
       'Last update: ' + (best.lastUpdate ? best.lastUpdate.toLocaleTimeString() : '\u2014');
+  } else if (best.onBus) {
+    line.textContent = '\uD83D\uDCF1 [' + devLabel(bestDev) + '] On bus \u2014 heading to Stop ' + best.onBus.stop;
+    sub.textContent = best.onBus.time ? ('Last update: ' + best.onBus.time.toLocaleTimeString()) : '';
   } else {
     line.textContent = 'No bus updates yet';
     sub.textContent = 'Selected devices have not reported.';
@@ -533,6 +536,20 @@ function renderRoute() {
       icon: L.divIcon({ className: '', html: '<div class="waitlbl">' + esc(waitText) + '</div>', iconSize: [220, 32], iconAnchor: [110, -18] }),
       zIndexOffset: 1000, interactive: false
     }).addTo(map).bindPopup('<b>' + esc(waitText) + '</b>');
+  } else if (st.onBus && st.busIdx < 0) {
+    var onBusStop = stopByKey(route, String(st.onBus.stop));
+    var onBusDevLbl = '';
+    try {
+      (function(){ try { return knownDevices() || []; } catch(e){ return []; } })().forEach(function (d) {
+        var dds = devDisplayState(route, d);
+        if (dds.onBus && !onBusDevLbl) onBusDevLbl = devLabel(d);
+      });
+    } catch (e) {}
+    var onBusText = '\uD83D\uDCF1 ' + (onBusDevLbl ? '[' + onBusDevLbl + '] ' : '') + 'On bus \u2014 heading to Stop ' + st.onBus.stop;
+    if (onBusStop) busMarker = L.marker([onBusStop.lat, onBusStop.lng], {
+      icon: L.divIcon({ className: '', html: '<div class="waitlbl" style="background:#0b6e4f;">' + esc(onBusText) + '</div>', iconSize: [220, 32], iconAnchor: [110, -18] }),
+      zIndexOffset: 1000, interactive: false
+    }).addTo(map).bindPopup('<b>' + esc(onBusText) + '</b>');
   } else if (st.busIdx >= 0 && st.busIdx < list.length) {
     var b = list[st.busIdx];
     busMarker = L.marker([b.lat, b.lng], {
@@ -913,9 +930,9 @@ function handleMessage(raw, opts) {
     addLog('\uD83D\uDCF1 [' + _devOb + '] on bus \u2014 heading to Stop ' + _stopNum + '.', 'AM', '');
     try {
       var _ds = devRouteState(_devOb, 'AM');
-      if (_ds) { _ds.waiting = null; }
+      if (_ds) { _ds.waiting = null; _ds.onBus = { stop: _stopNum, time: new Date() }; }
       // Clear aggregate waiting too (map banner reads state.AM.waiting)
-      if (typeof state !== 'undefined' && state.AM) { state.AM.waiting = null; }
+      if (typeof state !== 'undefined' && state.AM) { state.AM.waiting = null; state.AM.onBus = { stop: _stopNum, time: new Date() }; }
     } catch (e) {}
     try { renderRoute(); renderStatus(); } catch (e) {}
     return true;
