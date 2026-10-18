@@ -71,7 +71,7 @@
 </head>
 <body>
 <header>
-  <h1>&#x1F68C; Bus Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v4.1</span></h1>
+  <h1>&#x1F68C; Bus Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v4.2</span></h1>
   <div class="seg">
     <button id="btnAM" class="on">AM</button>
     <button id="btnPM">PM</button>
@@ -389,6 +389,18 @@ function getDisplayState(r) {
   if (!day) return freshRouteState();
   return stateFromEvents(r, (r === 'AM') ? day.am : day.pm);
 }
+// Returns true if every tracked device is done (got off or route complete).
+// Used to suppress the aggregate "off bus" banner/grey-out while another
+// phone is still riding.
+function allDevicesDone(r) {
+  var devs = Object.keys(devices || {});
+  if (!devs.length) return true;
+  for (var i = 0; i < devs.length; i++) {
+    var ds = devDisplayState(r, devs[i]);
+    if (!ds.done && !ds.complete) return false;
+  }
+  return true;
+}
 function restoreToday() {
   var today = torontoDateKey(new Date());
   var h = loadHistory();
@@ -429,7 +441,9 @@ function renderRoute() {
   routeLine = L.polyline(path(), { color: '#0b6e4f', weight: 4, opacity: 0.9 }).addTo(map);
   pinLayer = L.layerGroup().addTo(map);
   var st = displayStateFor(route), list = stops();
-  var rideOver = st.complete || st.done;
+  // Grey out unvisited stops only when ALL phones are done.
+  // If another phone is still riding, keep the map looking live.
+  var rideOver = (st.complete || st.done) && allDevicesDone(route);
   list.forEach(function (s, i) {
     var key = stopKey(s);
     var cls;
@@ -482,7 +496,9 @@ function renderRoute() {
       icon: L.divIcon({ className: '', html: '<div class="arrivedlbl">\u2713 Arrived</div>', iconSize: [110, 32], iconAnchor: [55, -18] }),
       zIndexOffset: 1000, interactive: false
     }).addTo(map);
-  } else if (st.done && st.offStop) {
+  } else if (st.done && st.offStop && allDevicesDone(route)) {
+    // Only show the aggregate off-bus banner when ALL phones are done.
+    // If another phone is still riding, suppress it (their progress shows instead).
     var agOff = stopByKey(route, st.offStop);
     var agOffText = '\uD83D\uDCF1 Off bus at ' + (agOff ? stopShort(agOff) : 'Stop ' + st.offStop);
     if (agOff) busMarker = L.marker([agOff.lat, agOff.lng], {
@@ -529,9 +545,30 @@ function renderStatus() {
     line.textContent = 'Route complete \u2014 bus reached the final stop';
     sub.textContent = st.lastUpdate ? ('Last update: ' + st.lastUpdate.toLocaleTimeString()) : '';
   } else if (st.done && st.offStop) {
-    var sOff = stopByKey(route, st.offStop);
-    line.textContent = '\uD83D\uDCF1 Got off bus at ' + (sOff ? stopShort(sOff) : 'Stop ' + st.offStop);
-    sub.textContent = st.lastUpdate ? ('Last update: ' + st.lastUpdate.toLocaleTimeString()) : '';
+    if (!allDevicesDone(route)) {
+      // Another phone still riding: show its progress instead.
+      var activeBest = null, activeDev = null, activeFrac = -1;
+      Object.keys(devices || {}).forEach(function (d) {
+        var ads = devDisplayState(route, d);
+        if (ads.done || ads.complete) return;
+        var adone = Object.keys(ads.reached).length;
+        var afrac = list.length ? adone / list.length : 0;
+        if (afrac > activeFrac) { activeBest = ads; activeDev = d; activeFrac = afrac; }
+      });
+      if (activeBest && activeBest.busIdx >= 0 && activeBest.busIdx < list.length) {
+        var abb = list[activeBest.busIdx];
+        line.textContent = '\uD83D\uDE8C [' + devLabel(activeDev) + '] at ' + stopShort(abb);
+        sub.textContent = activeBest.lastUpdate ? ('Last update: ' + activeBest.lastUpdate.toLocaleTimeString()) : '';
+      } else {
+        var sOff2 = stopByKey(route, st.offStop);
+        line.textContent = '\uD83D\uDCF1 Off bus at ' + (sOff2 ? stopShort(sOff2) : 'Stop ' + st.offStop);
+        sub.textContent = st.lastUpdate ? ('Last update: ' + st.lastUpdate.toLocaleTimeString()) : '';
+      }
+    } else {
+      var sOff = stopByKey(route, st.offStop);
+      line.textContent = '\uD83D\uDCF1 Off bus at ' + (sOff ? stopShort(sOff) : 'Stop ' + st.offStop);
+      sub.textContent = 'Tracking stopped' + (st.lastUpdate ? (' \u00B7 ' + st.lastUpdate.toLocaleTimeString()) : '');
+    }
   } else if (st.waiting && st.busIdx < 0) {
     var sWait = stopByKey(route, st.waiting);
     // Find which device is waiting for the ID
