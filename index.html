@@ -71,7 +71,7 @@
 </head>
 <body>
 <header>
-  <h1>&#x1F68C; Bus Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v4.4</span></h1>
+  <h1>&#x1F68C; Bus Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v4.5</span></h1>
   <div class="seg">
     <button id="btnAM" class="on">AM</button>
     <button id="btnPM">PM</button>
@@ -903,6 +903,14 @@ function handleMessage(raw, opts) {
   var mArrF = msg.match(new RegExp('^' + PHONE + ' \\[([AiW][0-9]{2})\\] arrived at final stop:'));
   var mArrF2 = msg.match(new RegExp('^' + PHONE + ' \\[([AiW][0-9]{2})\\] arrived at final stop \\((AM|PM)\\)'));
   var mBusF = msg.match(new RegExp('^' + BUS + ' \\[([AiW][0-9]{2})\\] at final stop \\((AM|PM)\\)'));
+  // "📱 [A30] off bus. Tracking stopped." -> info only, state already set by got-off
+  var mOffBus = msg.match(new RegExp('^' + PHONE + ' \\[([AiW][0-9]{2})\\] off bus\\. Tracking stopped\\.'));
+  if (mOffBus) {
+    var _dev = mOffBus[1];
+    registerDevice(_dev);
+    addLog('\uD83D\uDCF1 [' + _dev + '] off bus \u2014 tracking stopped.', 'PM', '');
+    return true;
+  }
   var silent = !!(opts && opts.silent);
   if (mWait || mOff || mBusAt || mArr || mArrF || mArrF2 || mBusF) {
     return handleNewFormat(mWait, mOff, mBusAt, mArr, (mArrF || mArrF2 || mBusF), msg, isTest, raw, opts, silent);
