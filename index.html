@@ -71,7 +71,7 @@
 </head>
 <body>
 <header>
-  <h1>&#x1F68C; Bus Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v5.1</span></h1>
+  <h1>&#x1F68C; Bus Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v5.2</span></h1>
   <div class="seg">
     <button id="btnAM" class="on">AM</button>
     <button id="btnPM">PM</button>
@@ -748,7 +748,7 @@ function backfillFromNtfy(topic) {
   var htmlUrl = 'https://ntfy.sh/' + encodeURIComponent(topic);
   function parseHtmlMessages(html) {
     var found = [];
-    var re = /🔔 TEST: 🚌 Stop [^<]{1,200}? reached\.|🚌 Stop [^<]{1,200}? reached\.|🚌 Final stop reached:[^<]{1,200}?\.|📱 \\[[^\]]+\\] [^<]{1,200}?\.|🚌 \\[[^\]]+\\] at [^<]{1,200}?\./g;
+    var re = /🔔 TEST: 🚌 Stop [^<]{1,200}? reached\.|🚌 Stop [^<]{1,200}? reached\.|🚌 Final stop reached:[^<]{1,200}?\.|📱 \\[[AiW][0-9]{2}\\] [^<]{1,200}?\.|🚌 \\[[AiW][0-9]{2}\\] at [^<]{1,200}?\./g;
     var m, now = Math.floor(Date.now() / 1000);
     while ((m = re.exec(html)) !== null) {
       var txt = m[0].replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>');
@@ -913,16 +913,16 @@ function handleMessage(raw, opts) {
   //   📱 [A98] arrived at Stop 2: ...          -> auto mode, advances
   //   🚌 [A98] at Stop 13: ... Route complete.
   //   📱 [A98] arrived at final stop: ...
-  var mWait = msg.match(new RegExp('^' + PHONE + ' \\[([^\]]+)\\] waiting at Stop (0[12]|[A-Z0-9]+)(?: \\(\\d+\\))?[:.]'));
-  var mOff  = msg.match(new RegExp('^' + PHONE + ' \\[([^\]]+)\\] got off at Stop (0[12]|[A-Z0-9]+)(?: \\(\\d+\\))?[:.]'));
-  var mBusAt = msg.match(new RegExp('^' + BUS + ' \\[([^\]]+)\\] at Stop (0[12]|[A-Z0-9]+)(?: \\(\\d+\\))?[:.]'));
-  var mArr  = msg.match(new RegExp('^' + PHONE + ' \\[([^\]]+)\\] arrived at Stop (0[12]|[A-Z0-9]+)(?: \\(\\d+\\))?[:.]'));
-  var mArrF = msg.match(new RegExp('^' + PHONE + ' \\[([^\]]+)\\] arrived at final stop:'));
-  var mArrF2 = msg.match(new RegExp('^' + PHONE + ' \\[([^\]]+)\\] arrived at final stop \\((AM|PM)\\)'));
-  var mBusF = msg.match(new RegExp('^' + BUS + ' \\[([^\]]+)\\] at final stop \\((AM|PM)\\)'));
+  var mWait = msg.match(new RegExp('^' + PHONE + ' \\[([AiW][0-9]{2})\\] waiting at Stop (0[12]|[A-Z0-9]+)(?: \\(\\d+\\))?[:.]'));
+  var mOff  = msg.match(new RegExp('^' + PHONE + ' \\[([AiW][0-9]{2})\\] got off at Stop (0[12]|[A-Z0-9]+)(?: \\(\\d+\\))?[:.]'));
+  var mBusAt = msg.match(new RegExp('^' + BUS + ' \\[([AiW][0-9]{2})\\] at Stop (0[12]|[A-Z0-9]+)(?: \\(\\d+\\))?[:.]'));
+  var mArr  = msg.match(new RegExp('^' + PHONE + ' \\[([AiW][0-9]{2})\\] arrived at Stop (0[12]|[A-Z0-9]+)(?: \\(\\d+\\))?[:.]'));
+  var mArrF = msg.match(new RegExp('^' + PHONE + ' \\[([AiW][0-9]{2})\\] arrived at final stop:'));
+  var mArrF2 = msg.match(new RegExp('^' + PHONE + ' \\[([AiW][0-9]{2})\\] arrived at final stop \\((AM|PM)\\)'));
+  var mBusF = msg.match(new RegExp('^' + BUS + ' \\[([AiW][0-9]{2})\\] at final stop \\((AM|PM)\\)'));
   // "📱 [A30] off bus. Tracking stopped." -> info only, state already set by got-off
   // "📱 [X##] on bus, heading to Stop N: ..." -> parse and clear waiting
-  var mOnBus = msg.match(new RegExp('^' + PHONE + ' \\[([^\]]+)\\] on bus, heading to Stop (\\d+):'));
+  var mOnBus = msg.match(new RegExp('^' + PHONE + ' \\[([AiW][0-9]{2})\\] on bus, heading to Stop (\\d+):'));
   if (mOnBus) {
     var _devOb = mOnBus[1];
     var _stopNum = mOnBus[2];
@@ -954,7 +954,7 @@ function handleMessage(raw, opts) {
     try { renderRoute(); renderStatus(); } catch (e) {}
     return true;
   }
-  var mOffBus = msg.match(new RegExp('^' + PHONE + ' \\[([^\]]+)\\] off bus\\. Tracking stopped\\.'));
+  var mOffBus = msg.match(new RegExp('^' + PHONE + ' \\[([AiW][0-9]{2})\\] off bus\\. Tracking stopped\\.'));
   if (mOffBus) {
     var _dev = mOffBus[1];
     registerDevice(_dev);
@@ -998,7 +998,7 @@ function handleMessage(raw, opts) {
     if (r !== route) setRoute(r);
     var st = state[r], list = r === 'AM' ? AM_STOPS : PM_STOPS;
     var whenF = (opts && opts.time) ? new Date(opts.time) : new Date();
-    var devMatchF = String(raw || '').match(/\[([^\]]+)\]\s*$/);
+    var devMatchF = String(raw || '').match(/\[([AiW][0-9]{2})\]\s*$/);
     var devF = devMatchF ? devMatchF[1] : DEV_UNKNOWN;
     var devIdF = devMatchF ? ' [' + devMatchF[1] + ']' : '';
     registerDevice(devF);
@@ -1024,7 +1024,7 @@ function handleMessage(raw, opts) {
 }
 
 function applyArrival(r, s, isTest, rawMsg, opts, kind, devArg) {
-  var devMatch = String(rawMsg || '').match(/\[([^\]]+)\]\s*$/);
+  var devMatch = String(rawMsg || '').match(/\[([AiW][0-9]{2})\]\s*$/);
   var dev = devArg || (devMatch ? devMatch[1] : DEV_UNKNOWN);
   var devId = (devArg || devMatch) ? ' [' + dev + ']' : '';
   registerDevice(dev);
