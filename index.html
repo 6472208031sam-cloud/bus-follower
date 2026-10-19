@@ -71,7 +71,7 @@
 </head>
 <body>
 <header>
-  <h1>&#x1F68C; Bus Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v5.6</span></h1>
+  <h1>&#x1F68C; Bus Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v5.7</span></h1>
   <div class="seg">
     <button id="btnAM" class="on">AM</button>
     <button id="btnPM">PM</button>
@@ -531,7 +531,8 @@ function renderRoute() {
         if (dds.waiting && !waitDevLbl) waitDevLbl = devLabel(d);
       });
     } catch (e) {}
-    var waitText = '\uD83D\uDCF1 ' + (waitDevLbl ? '[' + waitDevLbl + '] ' : '') + 'Waiting for bus at ' + (agWait ? stopShort(agWait) : 'Stop ' + st.waiting);
+    var _wLbl = (st.waitLabel) ? ' (' + st.waitLabel + ')' : '';
+    var waitText = '\uD83D\uDCF1 ' + (waitDevLbl ? '[' + waitDevLbl + ']' + _wLbl + ' ' : '') + 'Waiting for bus at ' + (agWait ? stopShort(agWait) : 'Stop ' + st.waiting);
     if (agWait) busMarker = L.marker([agWait.lat, agWait.lng], {
       icon: L.divIcon({ className: '', html: '<div class="waitlbl">' + esc(waitText) + '</div>', iconSize: [220, 32], iconAnchor: [110, -18] }),
       zIndexOffset: 1000, interactive: false
@@ -1086,13 +1087,13 @@ function handleNewFormat(mWait, mOff, mBusAt, mArr, mArrF, msg, isTest, raw, opt
     var fl = (r === 'AM') ? AM_STOPS : PM_STOPS;
     s = fl[fl.length - 1];
   }
-  if (mWait) return applyWaiting(r, s, dev, raw, opts, isTest);
+  if (mWait) return applyWaiting(r, s, dev, raw, opts, isTest, mWait[2] || '');
   if (mOff) return applyGotOff(r, s, dev, raw, opts, isTest);
   if (mBusAt && /Route complete\.\s*$/.test(msg)) return applyFinalNew(r, dev, raw, opts, isTest);
   if (mArrF) return applyFinalNew(r, dev, raw, opts, isTest);
   return applyArrival(r, s, isTest, raw, opts, mArr ? 'newarr' : 'newbus', dev);
 }
-function applyWaiting(r, s, dev, rawMsg, opts, isTest) {
+function applyWaiting(r, s, dev, rawMsg, opts, isTest, label) {
   var evTime = (opts && opts.time) ? new Date(opts.time) : new Date();
   var isOld = !viewDate && !(opts && opts.silent) &&
               torontoDateKey(evTime) !== torontoDateKey(new Date());
@@ -1103,9 +1104,9 @@ function applyWaiting(r, s, dev, rawMsg, opts, isTest) {
   lastRoute = r;
   var key = (r === 'AM') ? String(s.n) : s.letter;
   var st = state[r];
-  st.waiting = key; st.lastUpdate = evTime;
+  st.waiting = key; st.waitLabel = label || ''; st.lastUpdate = evTime;
   var dst = devRouteState(dev, r);
-  dst.waiting = key; dst.lastUpdate = evTime;
+  dst.waiting = key; dst.waitLabel = label || ''; dst.lastUpdate = evTime;
   if (isDevSelected(dev)) addLog((isTest ? '[TEST] ' : '') + rawMsg + busSwitchHint(r),
          (isTest ? 'TEST ' : '') + r, isTest ? 'test' : r.toLowerCase(), opts && opts.time);
   if (r === route) renderRoute();

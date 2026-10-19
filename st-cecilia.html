@@ -71,7 +71,7 @@
 </head>
 <body>
 <header>
-  <h1>&#x1F68C; St Cecilia Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v4.9</span></h1>
+  <h1>&#x1F68C; St Cecilia Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v5.0</span></h1>
   <div class="seg">
     <button id="btnAM" class="on">AM</button>
     <button id="btnPM">PM</button>
@@ -539,10 +539,14 @@ function renderRoute() {
     }).addTo(map).bindPopup('<b>' + esc(agOffText) + '</b><br><i>Tracking stopped</i>');
   } else if (st.waiting && st.busIdx < 0) {
     var agWait = stopByKey(route, st.waiting);
+    var _wDev2 = '';
+    try { (knownDevices()||[]).forEach(function(d){ var dds=devDisplayState(route,d); if(dds.waiting && !_wDev2) _wDev2=d; }); } catch(e){}
+    var _wLbl3 = st.waitLabel ? ' (' + st.waitLabel + ')' : '';
+    var _wTxt2 = '\uD83D\uDCF1 ' + (_wDev2 ? '[' + _wDev2 + ']' + _wLbl3 + ' ' : '') + 'Waiting for bus';
     if (agWait) busMarker = L.marker([agWait.lat, agWait.lng], {
-      icon: L.divIcon({ className: '', html: '<div class="waitlbl">\uD83D\uDCF1 Waiting for bus</div>', iconSize: [180, 32], iconAnchor: [90, -18] }),
+      icon: L.divIcon({ className: '', html: '<div class="waitlbl">' + esc(_wTxt2) + '</div>', iconSize: [220, 32], iconAnchor: [90, -18] }),
       zIndexOffset: 1000, interactive: false
-    }).addTo(map).bindPopup('<b>Waiting for bus</b><br>' + esc(stopShort(agWait)));
+    }).addTo(map).bindPopup('<b>' + esc(_wTxt2) + '</b><br>' + esc(stopShort(agWait)));
   } else if (st.onBus && !st.reached[String(st.onBus.stop)]) {
     var onBusStop = stopByKey(route, String(st.onBus.stop));
     var onBusDevLbl = '';
@@ -1079,13 +1083,13 @@ function handleNewFormat(mWait, mOff, mBusAt, mArr, mArrF, msg, isTest, raw, opt
     s = fl[fl.length - 1];
   }
   if (r !== route) setRoute(r);
-  if (mWait) return applyWaiting(r, s, dev, raw, opts, isTest);
+  if (mWait) return applyWaiting(r, s, dev, raw, opts, isTest, mWait[2] || '');
   if (mOff) return applyGotOff(r, s, dev, raw, opts, isTest);
   if (mBusAt && /Route complete\.\s*$/.test(msg)) return applyFinalNew(r, dev, raw, opts, isTest);
   if (mArrF) return applyFinalNew(r, dev, raw, opts, isTest);
   return applyArrival(r, s, isTest, raw, opts, mArr ? 'newarr' : 'newbus', dev);
 }
-function applyWaiting(r, s, dev, rawMsg, opts, isTest) {
+function applyWaiting(r, s, dev, rawMsg, opts, isTest, label) {
   var evTime = (opts && opts.time) ? new Date(opts.time) : new Date();
   var isOld = !viewDate && !(opts && opts.silent) &&
               torontoDateKey(evTime) !== torontoDateKey(new Date());
@@ -1095,9 +1099,9 @@ function applyWaiting(r, s, dev, rawMsg, opts, isTest) {
   if (isOld) return added; // previous-day event: history only, no live UI update
   lastRoute = r;
   var st = state[r];
-  st.waiting = s.letter; st.lastUpdate = evTime;
+  st.waiting = s.letter; st.waitLabel = label || ''; st.lastUpdate = evTime;
   var dst = devRouteState(dev, r);
-  dst.waiting = s.letter; dst.lastUpdate = evTime;
+  dst.waiting = s.letter; dst.waitLabel = label || ''; dst.lastUpdate = evTime;
   if (isDevSelected(dev)) addLog((isTest ? '[TEST] ' : '') + rawMsg,
          (isTest ? 'TEST ' : '') + r, isTest ? 'test' : r.toLowerCase(), opts && opts.time);
   if (r === route) renderRoute();
