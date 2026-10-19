@@ -71,7 +71,7 @@
 </head>
 <body>
 <header>
-  <h1>&#x1F68C; Bus Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v5.4</span></h1>
+  <h1>&#x1F68C; Bus Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v5.5</span></h1>
   <div class="seg">
     <button id="btnAM" class="on">AM</button>
     <button id="btnPM">PM</button>
@@ -925,7 +925,7 @@ function handleMessage(raw, opts) {
   var mOnBus = msg.match(new RegExp('^' + PHONE + ' \\[([AiW][0-9]{2})\\](?: \\(([^)]+)\\))? on bus, heading to Stop (\\d+):'));
   if (mOnBus) {
     var _devOb = mOnBus[1];
-    var _stopNum = mOnBus[2];
+    var _stopNum = mOnBus[3];
     registerDevice(_devOb);
     addLog('\uD83D\uDCF1 [' + _devOb + '] on bus \u2014 heading to Stop ' + _stopNum + '.', 'AM', '');
     try {
@@ -1072,7 +1072,7 @@ function handleNewFormat(mWait, mOff, mBusAt, mArr, mArrF, msg, isTest, raw, opt
   registerDevice(dev);
   var r = route, s = null;
   if (mWait || mOff || mBusAt || mArr) {
-    var label = m[2];
+    var label = m[3];
     // AM: 1-13 numeric; PM: S, 0, 01, 02, A-L
     if (/^(0|01|02)$/.test(label) || !/^\d+$/.test(label)) r = 'PM'; else r = 'AM';
     var list = (r === 'AM') ? AM_STOPS : PM_STOPS;
