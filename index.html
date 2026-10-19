@@ -71,7 +71,7 @@
 </head>
 <body>
 <header>
-  <h1>&#x1F68C; Bus Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v5.8</span></h1>
+  <h1>&#x1F68C; Bus Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v5.9</span></h1>
   <div class="seg">
     <button id="btnAM" class="on">AM</button>
     <button id="btnPM">PM</button>
@@ -374,7 +374,7 @@ function stateFromEvents(r, events) {
     var t = new Date(ev.time);
     if (!st.lastUpdate || t > st.lastUpdate) st.lastUpdate = t;
     if (ev.kind === 'wait') { if (st.busIdx < 0 && !st.waiting) st.waiting = key; return; }
-    if (ev.kind === 'off') { st.reached[key] = true; st.done = true; st.offStop = key; st.waiting = null; return; }
+    if (ev.kind === 'off') { st.reached[key] = true; st.done = true; st.offStop = key; st.offLabel = label || ''; st.waiting = null; return; }
     st.reached[key] = true;
     var idx = -1;
     list.forEach(function (s, i) {
@@ -516,7 +516,10 @@ function renderRoute() {
     // Only show the aggregate off-bus banner when ALL phones are done.
     // If another phone is still riding, suppress it (their progress shows instead).
     var agOff = stopByKey(route, st.offStop);
-    var agOffText = '\uD83D\uDCF1 Off bus at ' + (agOff ? stopShort(agOff) : 'Stop ' + st.offStop);
+    var _offDev = '';
+    try { (knownDevices()||[]).forEach(function(d){ var dds=devDisplayState(route,d); if(dds.done && dds.offStop && !_offDev) _offDev=d; }); } catch(e){}
+    var _offLbl = (st.offLabel ? ' (' + st.offLabel + ')' : '');
+    var agOffText = '\uD83D\uDCF1 ' + (_offDev ? '[' + _offDev + ']' + _offLbl + ' ' : '') + 'Off bus at ' + (agOff ? stopShort(agOff) : 'Stop ' + st.offStop);
     if (agOff) busMarker = L.marker([agOff.lat, agOff.lng], {
       icon: L.divIcon({ className: '', html: '<div class="gotofflbl">' + esc(agOffText) + '</div>', iconSize: [220, 32], iconAnchor: [110, -18] }),
       zIndexOffset: 1000, interactive: false
@@ -1089,7 +1092,7 @@ function handleNewFormat(mWait, mOff, mBusAt, mArr, mArrF, msg, isTest, raw, opt
     s = fl[fl.length - 1];
   }
   if (mWait) return applyWaiting(r, s, dev, raw, opts, isTest, mWait[2] || '');
-  if (mOff) return applyGotOff(r, s, dev, raw, opts, isTest);
+  if (mOff) return applyGotOff(r, s, dev, raw, opts, isTest, mOff[2] || '');
   if (mBusAt && /Route complete\.\s*$/.test(msg)) return applyFinalNew(r, dev, raw, opts, isTest);
   if (mArrF) return applyFinalNew(r, dev, raw, opts, isTest);
   return applyArrival(r, s, isTest, raw, opts, mArr ? 'newarr' : 'newbus', dev);
@@ -1113,7 +1116,7 @@ function applyWaiting(r, s, dev, rawMsg, opts, isTest, label) {
   if (r === route) renderRoute();
   return added;
 }
-function applyGotOff(r, s, dev, rawMsg, opts, isTest) {
+function applyGotOff(r, s, dev, rawMsg, opts, isTest, label) {
   var evTime = (opts && opts.time) ? new Date(opts.time) : new Date();
   var isOld = !viewDate && !(opts && opts.silent) &&
               torontoDateKey(evTime) !== torontoDateKey(new Date());
