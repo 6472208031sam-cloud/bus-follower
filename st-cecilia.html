@@ -71,7 +71,7 @@
 </head>
 <body>
 <header>
-  <h1>&#x1F68C; St Cecilia Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v4.6</span></h1>
+  <h1>&#x1F68C; St Cecilia Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v4.7</span></h1>
   <div class="seg">
     <button id="btnAM" class="on">AM</button>
     <button id="btnPM">PM</button>
@@ -914,14 +914,14 @@ function handleMessage(raw, opts) {
   //   📱 [A98] arrived at Stop 2: Walking.      -> auto mode, advances
   //   🚌 [A98] at Stop 9: St. Cecilia. Route complete.
   //   📱 [A98] arrived at final stop: St. Cecilia.
-  var mWait = msg.match(new RegExp('^' + PHONE + ' \\[([AiW][0-9]{2})\\] waiting at Stop ([1-9A-I])(?: \\(\\d+\\))?[:.]'));
-  var mOff  = msg.match(new RegExp('^' + PHONE + ' \\[([AiW][0-9]{2})\\] got off at Stop ([1-9A-I])(?: \\(\\d+\\))?[:.]'));
-  var mBusAt = msg.match(new RegExp('^' + BUS + ' \\[([AiW][0-9]{2})\\] at Stop ([1-9A-I])(?: \\(\\d+\\))?[:.]'));
-  var mArr  = msg.match(new RegExp('^' + PHONE + ' \\[([AiW][0-9]{2})\\] arrived at Stop ([1-9A-I])(?: \\(\\d+\\))?[:.]'));
-  var mArrF = msg.match(new RegExp('^' + PHONE + ' \\[([AiW][0-9]{2})\\] arrived at final stop:'));
+  var mWait = msg.match(new RegExp('^' + PHONE + ' \\[([AiW][0-9]{2})\\](?: \\(([^)]+)\\))? waiting at Stop ([1-9A-I])(?: \\(\\d+\\))?[:.]'));
+  var mOff  = msg.match(new RegExp('^' + PHONE + ' \\[([AiW][0-9]{2})\\](?: \\(([^)]+)\\))? got off at Stop ([1-9A-I])(?: \\(\\d+\\))?[:.]'));
+  var mBusAt = msg.match(new RegExp('^' + BUS + ' \\[([AiW][0-9]{2})\\](?: \\(([^)]+)\\))? at Stop ([1-9A-I])(?: \\(\\d+\\))?[:.]'));
+  var mArr  = msg.match(new RegExp('^' + PHONE + ' \\[([AiW][0-9]{2})\\](?: \\(([^)]+)\\))? arrived at Stop ([1-9A-I])(?: \\(\\d+\\))?[:.]'));
+  var mArrF = msg.match(new RegExp('^' + PHONE + ' \\[([AiW][0-9]{2})\\](?: \\(([^)]+)\\))? arrived at final stop:'));
   // "📱 [A30] off bus. Tracking stopped." -> info only
   // "📱 [X##] on bus, heading to Stop N: ..." -> parse and clear waiting
-  var mOnBus = msg.match(new RegExp('^' + PHONE + ' \\[([AiW][0-9]{2})\\] on bus, heading to Stop (\\d+):'));
+  var mOnBus = msg.match(new RegExp('^' + PHONE + ' \\[([AiW][0-9]{2})\\](?: \\(([^)]+)\\))? on bus, heading to Stop (\\d+):'));
   if (mOnBus) {
     var _devOb = mOnBus[1];
     var _stopNum = mOnBus[2];
@@ -953,7 +953,7 @@ function handleMessage(raw, opts) {
     try { renderRoute(); renderStatus(); } catch (e) {}
     return true;
   }
-  var mOffBus = msg.match(new RegExp('^' + PHONE + ' \\[([AiW][0-9]{2})\\] off bus\\. Tracking stopped\\.'));
+  var mOffBus = msg.match(new RegExp('^' + PHONE + ' \\[([AiW][0-9]{2})\\](?: \\(([^)]+)\\))? off bus\\. Tracking stopped\\.'));
   if (mOffBus) {
     var _dev = mOffBus[1];
     registerDevice(_dev);
