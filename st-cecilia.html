@@ -71,7 +71,7 @@
 </head>
 <body>
 <header>
-  <h1>&#x1F68C; St Cecilia Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v4.5</span></h1>
+  <h1>&#x1F68C; St Cecilia Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v4.6</span></h1>
   <div class="seg">
     <button id="btnAM" class="on">AM</button>
     <button id="btnPM">PM</button>
@@ -330,7 +330,7 @@ function renderStatusFiltered(list) {
     sub.textContent = (route === 'AM' && s.t ? s.t + ' \u00B7 ' : '') +
       'Last update: ' + (best.lastUpdate ? best.lastUpdate.toLocaleTimeString() : '\u2014');
   } else if (best.onBus) {
-    line.textContent = '\\uD83D\\uDCF1 [' + devLabel(bestDev) + '] On bus \\u2014 heading to Stop ' + best.onBus.stop;
+    line.textContent = '\uD83D\uDCF1 [' + devLabel(bestDev) + '] On bus \u2014 heading to Stop ' + best.onBus.stop;
     sub.textContent = best.onBus.time ? ('Last update: ' + best.onBus.time.toLocaleTimeString()) : '';
   } else {
     line.textContent = 'No bus updates yet';
@@ -552,7 +552,7 @@ function renderRoute() {
         if (dds.onBus && !onBusDevLbl) onBusDevLbl = devLabel(d);
       });
     } catch (e) {}
-    var onBusText = '\\uD83D\\uDCF1 ' + (onBusDevLbl ? '[' + onBusDevLbl + '] ' : '') + 'On bus \\u2014 heading to Stop ' + st.onBus.stop;
+    var onBusText = '\uD83D\uDCF1 ' + (onBusDevLbl ? '[' + onBusDevLbl + '] ' : '') + 'On bus \u2014 heading to Stop ' + st.onBus.stop;
     if (onBusStop) busMarker = L.marker([onBusStop.lat, onBusStop.lng], {
       icon: L.divIcon({ className: '', html: '<div class="waitlbl" style="background:#0b6e4f;">' + esc(onBusText) + '</div>', iconSize: [220, 32], iconAnchor: [110, -18] }),
       zIndexOffset: 1000, interactive: false
