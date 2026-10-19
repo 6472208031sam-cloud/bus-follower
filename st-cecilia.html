@@ -71,7 +71,7 @@
 </head>
 <body>
 <header>
-  <h1>&#x1F68C; St Cecilia Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v4.3</span></h1>
+  <h1>&#x1F68C; St Cecilia Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v4.4</span></h1>
   <div class="seg">
     <button id="btnAM" class="on">AM</button>
     <button id="btnPM">PM</button>
@@ -921,33 +921,34 @@ function handleMessage(raw, opts) {
   var mArrF = msg.match(new RegExp('^' + PHONE + ' \\[([^\]]+)\\] arrived at final stop:'));
   // "📱 [A30] off bus. Tracking stopped." -> info only
   // "📱 [X##] on bus, heading to Stop N: ..." -> parse and clear waiting
-  var mOnBus = msg.match(new RegExp('^' + PHONE + ' \\[([^\]]+)\\] on bus, heading to Stop (\\d+):'));
+  var mOnBus = msg.match(new RegExp('^' + PHONE + ' \\\\[([^\\]]+)\\\\] on bus, heading to Stop ([A-Z0-9]+)(?: \\\\((\\\\d+)\\))?:'));
   if (mOnBus) {
     var _devOb = mOnBus[1];
     var _stopNum = mOnBus[2];
+    var _isPmOb = /^[A-Z]$/.test(_stopNum);
+    var _routeOb = _isPmOb ? 'PM' : 'AM';
+    var _stopsOb = _isPmOb ? (typeof PM_STOPS !== 'undefined' ? PM_STOPS : []) : (typeof AM_STOPS !== 'undefined' ? AM_STOPS : []);
     registerDevice(_devOb);
-    addLog('\uD83D\uDCF1 [' + _devOb + '] on bus \u2014 heading to Stop ' + _stopNum + '.', 'AM', '');
+    addLog('\\uD83D\\uDCF1 [' + _devOb + '] on bus \\u2014 heading to Stop ' + _stopNum + '.', _routeOb, '');
     try {
-      var _ds = devRouteState(_devOb, 'AM');
+      var _ds = devRouteState(_devOb, _routeOb);
       if (_ds) {
-        // Mark the waiting stop as reached (boarded the bus there)
         if (_ds.waiting) {
           _ds.reached[_ds.waiting] = true;
           var _wIdx = -1;
-          try { _wIdx = AM_STOPS.findIndex(function(s) { return String(s.n) === String(_ds.waiting); }); } catch (e) {}
+          try { _wIdx = _stopsOb.findIndex(function(s) { return String(s.n || s.letter) === String(_ds.waiting); }); } catch (e) {}
           if (_wIdx > _ds.busIdx) _ds.busIdx = _wIdx;
         }
         _ds.waiting = null; _ds.onBus = { stop: _stopNum, time: new Date() };
       }
-      // Clear aggregate waiting too (map banner reads state.AM.waiting)
-      if (typeof state !== 'undefined' && state.AM) {
-        if (state.AM.waiting) {
-          state.AM.reached[state.AM.waiting] = true;
+      if (typeof state !== 'undefined' && state[_routeOb]) {
+        if (state[_routeOb].waiting) {
+          state[_routeOb].reached[state[_routeOb].waiting] = true;
           var _awIdx = -1;
-          try { _awIdx = AM_STOPS.findIndex(function(s) { return String(s.n) === String(state.AM.waiting); }); } catch (e) {}
-          if (_awIdx > state.AM.busIdx) state.AM.busIdx = _awIdx;
+          try { _awIdx = _stopsOb.findIndex(function(s) { return String(s.n || s.letter) === String(state[_routeOb].waiting); }); } catch (e) {}
+          if (_awIdx > state[_routeOb].busIdx) state[_routeOb].busIdx = _awIdx;
         }
-        state.AM.waiting = null; state.AM.onBus = { stop: _stopNum, time: new Date() };
+        state[_routeOb].waiting = null; state[_routeOb].onBus = { stop: _stopNum, time: new Date() };
       }
     } catch (e) {}
     try { renderRoute(); renderStatus(); } catch (e) {}
