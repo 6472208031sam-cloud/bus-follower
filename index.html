@@ -71,7 +71,7 @@
 </head>
 <body>
 <header>
-  <h1>&#x1F68C; Bus Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v5.9</span></h1>
+  <h1>&#x1F68C; Bus Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v6.0</span></h1>
   <div class="seg">
     <button id="btnAM" class="on">AM</button>
     <button id="btnPM">PM</button>
@@ -965,7 +965,8 @@ function handleMessage(raw, opts) {
   if (mOffBus) {
     var _dev = mOffBus[1];
     registerDevice(_dev);
-    addLog('\uD83D\uDCF1 [' + _dev + '] off bus \u2014 tracking stopped.', 'PM', '');
+    var _obLbl2 = mOffBus[2] ? ' (' + mOffBus[2] + ')' : '';
+    addLog('\uD83D\uDCF1 [' + _dev + ']' + _obLbl2 + ' off bus \u2014 tracking stopped.', 'PM', '');
     return true;
   }
   var silent = !!(opts && opts.silent);
@@ -1127,7 +1128,7 @@ function applyGotOff(r, s, dev, rawMsg, opts, isTest, label) {
   lastRoute = r;
   var key = (r === 'AM') ? String(s.n) : s.letter;
   var st = state[r];
-  st.reached[key] = true; st.done = true; st.offStop = key; st.waiting = null; st.lastUpdate = evTime;
+  st.reached[key] = true; st.done = true; st.offStop = key; st.offLabel = label || ''; st.waiting = null; st.lastUpdate = evTime;
   var dst = devRouteState(dev, r);
   dst.reached[key] = true; dst.done = true; dst.offStop = key; dst.waiting = null; dst.lastUpdate = evTime;
   if (isDevSelected(dev)) addLog((isTest ? '[TEST] ' : '') + rawMsg + busSwitchHint(r),
