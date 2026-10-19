@@ -71,7 +71,7 @@
 </head>
 <body>
 <header>
-  <h1>&#x1F68C; Bus Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v5.7</span></h1>
+  <h1>&#x1F68C; Bus Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v5.8</span></h1>
   <div class="seg">
     <button id="btnAM" class="on">AM</button>
     <button id="btnPM">PM</button>
@@ -534,7 +534,7 @@ function renderRoute() {
     var _wLbl = (st.waitLabel) ? ' (' + st.waitLabel + ')' : '';
     var waitText = '\uD83D\uDCF1 ' + (waitDevLbl ? '[' + waitDevLbl + ']' + _wLbl + ' ' : '') + 'Waiting for bus at ' + (agWait ? stopShort(agWait) : 'Stop ' + st.waiting);
     if (agWait) busMarker = L.marker([agWait.lat, agWait.lng], {
-      icon: L.divIcon({ className: '', html: '<div class="waitlbl">' + esc(waitText) + '</div>', iconSize: [220, 32], iconAnchor: [110, -18] }),
+      icon: L.divIcon({ className: '', html: '<div class="waitlbl" style="white-space:normal;line-height:1.3;padding:6px 14px;">' + esc(waitText) + '</div>', iconSize: [240, 52], iconAnchor: [120, -30] }),
       zIndexOffset: 1000, interactive: false
     }).addTo(map).bindPopup('<b>' + esc(waitText) + '</b>');
   } else if (st.onBus && !st.reached[String(st.onBus.stop)]) {
@@ -549,7 +549,7 @@ function renderRoute() {
     var _obLbl = (st.onBus && st.onBus.label) ? ' (' + st.onBus.label + ')' : '';
     var onBusText = '\uD83D\uDCF1 ' + (onBusDevLbl ? '[' + onBusDevLbl + ']' + _obLbl + ' ' : '') + 'On bus \u2014 heading to Stop ' + st.onBus.stop;
     if (onBusStop) busMarker = L.marker([onBusStop.lat, onBusStop.lng], {
-      icon: L.divIcon({ className: '', html: '<div class="waitlbl" style="background:#0b6e4f;">' + esc(onBusText) + '</div>', iconSize: [220, 32], iconAnchor: [110, -18] }),
+      icon: L.divIcon({ className: '', html: '<div class="waitlbl" style="background:#0b6e4f;white-space:normal;line-height:1.3;padding:6px 14px;">' + esc(onBusText) + '</div>', iconSize: [240, 52], iconAnchor: [120, -30] }),
       zIndexOffset: 1000, interactive: false
     }).addTo(map).bindPopup('<b>' + esc(onBusText) + '</b>');
   } else if (st.busIdx >= 0 && st.busIdx < list.length) {
@@ -614,7 +614,8 @@ function renderStatus() {
         if (ds.waiting && !waitDev) waitDev = devLabel(d);
       });
     } catch (e) {}
-    line.textContent = '\uD83D\uDCF1 ' + (waitDev ? '[' + waitDev + '] ' : '') + 'Waiting for bus at ' + (sWait ? stopShort(sWait) : 'Stop ' + st.waiting);
+    var _sLbl = (st.waitLabel ? ' (' + st.waitLabel + ')' : '');
+    line.textContent = '\uD83D\uDCF1 ' + (waitDev ? '[' + waitDev + ']' + _sLbl + ' ' : '') + 'Waiting for bus at ' + (sWait ? stopShort(sWait) : 'Stop ' + st.waiting);
     sub.textContent = st.lastUpdate ? ('Last update: ' + st.lastUpdate.toLocaleTimeString()) : '';
   } else if (st.busIdx >= 0) {
     var s = list[st.busIdx];

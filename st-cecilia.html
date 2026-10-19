@@ -71,7 +71,7 @@
 </head>
 <body>
 <header>
-  <h1>&#x1F68C; St Cecilia Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v5.0</span></h1>
+  <h1>&#x1F68C; St Cecilia Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v5.1</span></h1>
   <div class="seg">
     <button id="btnAM" class="on">AM</button>
     <button id="btnPM">PM</button>
@@ -544,7 +544,7 @@ function renderRoute() {
     var _wLbl3 = st.waitLabel ? ' (' + st.waitLabel + ')' : '';
     var _wTxt2 = '\uD83D\uDCF1 ' + (_wDev2 ? '[' + _wDev2 + ']' + _wLbl3 + ' ' : '') + 'Waiting for bus';
     if (agWait) busMarker = L.marker([agWait.lat, agWait.lng], {
-      icon: L.divIcon({ className: '', html: '<div class="waitlbl">' + esc(_wTxt2) + '</div>', iconSize: [220, 32], iconAnchor: [90, -18] }),
+      icon: L.divIcon({ className: '', html: '<div class="waitlbl" style="white-space:normal;line-height:1.3;padding:6px 14px;">' + esc(_wTxt2) + '</div>', iconSize: [240, 52], iconAnchor: [120, -30] }),
       zIndexOffset: 1000, interactive: false
     }).addTo(map).bindPopup('<b>' + esc(_wTxt2) + '</b><br>' + esc(stopShort(agWait)));
   } else if (st.onBus && !st.reached[String(st.onBus.stop)]) {
@@ -559,7 +559,7 @@ function renderRoute() {
     var _obLbl = (st.onBus && st.onBus.label) ? ' (' + st.onBus.label + ')' : '';
     var onBusText = '\uD83D\uDCF1 ' + (onBusDevLbl ? '[' + onBusDevLbl + ']' + _obLbl + ' ' : '') + 'On bus \u2014 heading to Stop ' + st.onBus.stop;
     if (onBusStop) busMarker = L.marker([onBusStop.lat, onBusStop.lng], {
-      icon: L.divIcon({ className: '', html: '<div class="waitlbl" style="background:#0b6e4f;">' + esc(onBusText) + '</div>', iconSize: [220, 32], iconAnchor: [110, -18] }),
+      icon: L.divIcon({ className: '', html: '<div class="waitlbl" style="background:#0b6e4f;white-space:normal;line-height:1.3;padding:6px 14px;">' + esc(onBusText) + '</div>', iconSize: [240, 52], iconAnchor: [120, -30] }),
       zIndexOffset: 1000, interactive: false
     }).addTo(map).bindPopup('<b>' + esc(onBusText) + '</b>');
   } else if (st.busIdx >= 0 && st.busIdx < list.length) {
