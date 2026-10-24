@@ -71,7 +71,7 @@
 </head>
 <body>
 <header>
-  <h1>&#x1F68C; St Cecilia Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v5.7</span></h1>
+  <h1>&#x1F68C; St Cecilia Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v5.8</span></h1>
   <div class="seg">
     <button id="btnAM" class="on">AM</button>
     <button id="btnPM">PM</button>
@@ -401,7 +401,7 @@ function stateFromEvents(r, events) {
     var t = new Date(ev.time);
     if (!st.lastUpdate || t > st.lastUpdate) st.lastUpdate = t;
     if (ev.kind === 'wait') { if (st.busIdx < 0 && !st.waiting) st.waiting = key; return; }
-    if (ev.kind === 'off') { st.reached[key] = true; st.done = true; st.offStop = key; st.offLabel = label || ''; st.waiting = null; return; }
+    if (ev.kind === 'off') { st.reached[key] = true; st.done = true; st.offStop = key; st.offLabel = ''; st.waiting = null; return; }
     st.reached[key] = true;
     var idx = -1;
     list.forEach(function (s, i) {
