@@ -71,7 +71,7 @@
 </head>
 <body>
 <header>
-  <h1>&#x1F68C; Bus Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v6.14</span></h1>
+  <h1>&#x1F68C; Bus Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v6.15</span></h1>
   <div class="seg">
     <button id="btnAM" class="on">AM</button>
     <button id="btnPM">PM</button>
@@ -301,7 +301,7 @@ function renderStatusFiltered(list) {
     sub.textContent = best.lastUpdate ? ('Last update: ' + best.lastUpdate.toLocaleTimeString()) : '';
   } else if (best.busIdx >= 0) {
     var s = list[best.busIdx];
-    line.textContent = 'Bus at ' + stopShort(s) + ' of ' + list.length + ' [' + devLabel(bestDev) + ']';
+    line.textContent = 'Bus at ' + stopShort(s) + ' of ' + list.length + ' [' + devLabel(bestDev) + ']' + (route === 'PM' && best.delaySec !== null && best.delaySec !== undefined ? onBusPillSuffix(best.delaySec, (best.busIdx + 1 < list.length) ? list[best.busIdx + 1] : null) : '');
     sub.textContent = (route === 'AM' && s.t ? s.t + ' \u00B7 ' : '') +
       'Last update: ' + (best.lastUpdate ? best.lastUpdate.toLocaleTimeString() : '\u2014');
   } else if (best.onBus) {
@@ -391,6 +391,10 @@ function stateFromEvents(r, events) {
       return;
     }
     st.reached[key] = true;
+    if (r === 'PM' && !ev.test) {
+      st.arrLabel = ev.label || '';
+      var ndS = calcArrivalDelay(r, stopByKey(r, key), t); if (ndS !== null) st.delaySec = ndS;
+    }
     var idx = -1;
     list.forEach(function (s, i) {
       if ((r === 'AM') ? (s.n === ev.stop) : (s.letter === ev.letter)) idx = i;
@@ -451,12 +455,14 @@ function stopKey(s) { return route === 'AM' ? String(s.n) : s.letter; }
 function stopShort(s) { return route === 'AM' ? ('Stop ' + s.n) : ('Stop ' + s.letter + ' (' + s.am + ')'); }
 function stopByKey(r, key) { var f = null; var l = (r === 'AM') ? AM_STOPS : PM_STOPS;
   l.forEach(function (s) { if ((r === 'AM' ? String(s.n) : s.letter) === key) f = s; }); return f; }
-/* ===== Minutes Behind: delay measured ONLY from on-bus events =====
-   delay = on-bus time - scheduled time of the stop just departed - allowance.
-   Arrivals never calculate; they display the carried value. The timetable is
-   the stops' own "t" fields (fixed page data, like the stop lists): Bus AM
-   carries the official route 107 times; PM stops have none, and a blank
-   stop/route calculates nothing (delay reads zero there). */
+/* ===== Minutes Behind =====
+   AM: delay measured ONLY from on-bus events (delay = on-bus time -
+   scheduled time of the stop just departed - allowance); arrivals display
+   the carried value. PM amendment (Domi, 2026-10-25): PM rides send no
+   on-bus messages (driver checkpoints are AM-only), so PM measures from
+   ARRIVALS: delay = arrival time - this stop's scheduled time, NO allowance.
+   The timetable is the stops' own "t" fields (fixed page data). */
+
 var ONBUS_ALLOWANCE_S = 60;
 var ON_TIME_BAND_S = 50; // |delay| below this reads "on time" (approved Friday table: 0m48s on time, 0m58s = 1 min late)
 function schedMinOfStop(s) {
@@ -490,6 +496,13 @@ function calcOnBusDelay(r, headingKey, when) {
   var prevMin = schedMinOfStop(list[idx - 1]);
   if (prevMin === null) return null;
   return torontoTODSec(when) - prevMin * 60 - ONBUS_ALLOWANCE_S;
+}
+function calcArrivalDelay(r, stopObj, when) {
+  // PM-only: arrivals fire at the stop (not 150m past it), so no allowance.
+  if (r !== 'PM' || !stopObj) return null;
+  var sm = schedMinOfStop(stopObj);
+  if (sm === null) return null;
+  return torontoTODSec(when) - sm * 60;
 }
 function fmtDelayWord(sec) {
   if (sec === null || sec === undefined) return 'on time';
@@ -547,6 +560,10 @@ function annotateDelays(r, events) {
       return;
     }
     if (!ev.test && (ev.kind === 'bus' || ev.kind === 'newbus' || ev.kind === 'newarr' || ev.kind === 'newfinal' || ev.final)) {
+      if (r === 'PM') {
+        var ndAn = calcArrivalDelay(r, stopByKey(r, ev.letter), new Date(ev.time));
+        if (ndAn !== null) { delays[dev] = ndAn; cur = ndAn; }
+      }
       ev._dsfx = arrivalDelaySuffix(cur, r);
     }
   });
@@ -672,6 +689,27 @@ function renderRoute() {
       icon: L.divIcon({ className: '', html: '<div class="waitlbl" style="background:#0b6e4f;white-space:normal;line-height:1.3;padding:6px 14px;">' + esc(onBusText) + '</div>', iconSize: [240, 68], iconAnchor: [120, -30] }),
       zIndexOffset: 1000, interactive: false
     }).addTo(map).bindPopup('<b>' + esc(onBusText) + '</b>');
+  } else if (route === 'PM' && st.delaySec !== null && st.delaySec !== undefined && st.busIdx >= 0 && st.busIdx < list.length && !st.complete && !st.done) {
+    var pmStop = list[st.busIdx];
+    var pmNext = (st.busIdx + 1 < list.length) ? list[st.busIdx + 1] : null;
+    var pmDevLbl = '', pmNameLbl = st.arrLabel || '';
+    try {
+      (function(){ try { return knownDevices() || []; } catch(e){ return []; } })().forEach(function (d) {
+        var dds2 = devDisplayState(route, d);
+        if (!pmDevLbl && dds2.busIdx === st.busIdx && dds2.delaySec === st.delaySec) { pmDevLbl = devLabel(d); if (dds2.arrLabel) pmNameLbl = dds2.arrLabel; }
+      });
+    } catch (e) {}
+    var pmNextMin = schedMinOfStop(pmNext);
+    var pmEtaTxt = (pmNext && pmNextMin !== null) ? ' \u00B7 ETA ' + fmtClockSec(pmNextMin * 60 + st.delaySec) : '';
+    var pmWord = fmtDelayWord(st.delaySec);
+    var pmText = '\uD83D\uDCF1 ' + (pmDevLbl ? '[' + pmDevLbl + ']' + (pmNameLbl ? ' (' + pmNameLbl + ')' : '') + ' ' : '') +
+      'At ' + stopShort(pmStop) +
+      (pmNext ? ' \u2014 next ' + stopShort(pmNext) + pmEtaTxt : ' \u2014 final stop') +
+      ' \u00B7 ' + (pmWord === 'on time' ? 'on time' : 'running ' + pmWord);
+    busMarker = L.marker([pmStop.lat, pmStop.lng], {
+      icon: L.divIcon({ className: '', html: '<div class="waitlbl" style="background:#0b6e4f;white-space:normal;line-height:1.3;padding:6px 14px;">' + esc(pmText) + '</div>', iconSize: [240, 68], iconAnchor: [120, -30] }),
+      zIndexOffset: 1000, interactive: false
+    }).addTo(map).bindPopup('<b>' + esc(pmText) + '</b>');
   } else if (st.busIdx >= 0 && st.busIdx < list.length) {
     var b = list[st.busIdx];
     busMarker = L.marker([b.lat, b.lng], {
@@ -739,7 +777,7 @@ function renderStatus() {
     sub.textContent = st.lastUpdate ? ('Last update: ' + st.lastUpdate.toLocaleTimeString()) : '';
   } else if (st.busIdx >= 0) {
     var s = list[st.busIdx];
-    line.textContent = 'Bus at ' + stopShort(s) + ' of ' + list.length;
+    line.textContent = 'Bus at ' + stopShort(s) + ' of ' + list.length + (route === 'PM' && st.delaySec !== null && st.delaySec !== undefined ? onBusPillSuffix(st.delaySec, (st.busIdx + 1 < list.length) ? list[st.busIdx + 1] : null) : '');
     sub.textContent = (route === 'AM' && s.t ? s.t + ' \u00B7 ' : '') +
       'Last update: ' + (st.lastUpdate ? st.lastUpdate.toLocaleTimeString() : '\u2014');
   } else if (st.onBus) {
@@ -1172,6 +1210,7 @@ function handleMessage(raw, opts) {
     var dstF = devRouteState(devF, r);
     dstF.complete = true; dstF.busIdx = list.length - 1; dstF.lastUpdate = whenF;
     dstF.reached[keyF] = true;
+    if (r === 'PM' && !isTest) { var ndL = calcArrivalDelay(r, list[list.length - 1], whenF); if (ndL !== null) { dstF.delaySec = ndL; st.delaySec = ndL; } }
     lastRoute = r;
     if (isDevSelected(devF)) addLog((isTest ? '[TEST] ' : '') + 'Final stop reached (' + r + '). Route complete.' + devIdF + (isTest ? '' : arrivalDelaySuffix(dstF.delaySec, r)),
            (isTest ? 'TEST ' : '') + r, 'test', opts && opts.time);
@@ -1183,7 +1222,7 @@ function handleMessage(raw, opts) {
   }
 }
 
-function applyArrival(r, s, isTest, rawMsg, opts, kind, devArg) {
+function applyArrival(r, s, isTest, rawMsg, opts, kind, devArg, lblArg) {
   var devMatch = String(rawMsg || '').match(/\[([AiW][0-9]{2})\]\s*$/);
   var dev = devArg || (devMatch ? devMatch[1] : DEV_UNKNOWN);
   var devId = (devArg || devMatch) ? ' [' + dev + ']' : '';
@@ -1195,7 +1234,7 @@ function applyArrival(r, s, isTest, rawMsg, opts, kind, devArg) {
               torontoDateKey(evTime) !== torontoDateKey(new Date());
   var st = state[r], list = r === 'AM' ? AM_STOPS : PM_STOPS;
   var key = r === 'AM' ? String(s.n) : s.letter;
-  var added = recordEvent(r, s, isTest, rawMsg, false, opts && opts.time, opts && opts.deferUI, dev, kind || 'bus');
+  var added = recordEvent(r, s, isTest, rawMsg, false, opts && opts.time, opts && opts.deferUI, dev, kind || 'bus', lblArg ? { label: lblArg } : undefined);
   if (viewDate) return added; // history mode: accumulate silently, don't touch the display
   if (opts && opts.silent) return added; // backfill: rendering deferred to the end
   if (isOld) return added; // previous-day event: history only, no live UI update
@@ -1212,6 +1251,10 @@ function applyArrival(r, s, isTest, rawMsg, opts, kind, devArg) {
   dst.onBus = null;
   if (idx > dst.busIdx) dst.busIdx = idx;
   dst.lastUpdate = evTime;
+  if (r === 'PM') {
+    dst.arrLabel = lblArg || '';
+    if (!isTest) { st.arrLabel = lblArg || ''; var ndA = calcArrivalDelay(r, s, evTime); if (ndA !== null) { dst.delaySec = ndA; st.delaySec = ndA; } }
+  }
   var label = r === 'AM' ? ('Stop ' + s.n) : ('Stop ' + s.letter + ' (' + s.am + ')');
   if (isDevSelected(dev)) {
     var logText = (kind === 'newbus' || kind === 'newarr')
@@ -1247,9 +1290,9 @@ function handleNewFormat(mWait, mOff, mBusAt, mArr, mArrF, msg, isTest, raw, opt
   }
   if (mWait) return applyWaiting(r, s, dev, raw, opts, isTest, mWait[2] || '');
   if (mOff) return applyGotOff(r, s, dev, raw, opts, isTest, mOff[2] || '');
-  if (mBusAt && /Route complete\.\s*$/.test(msg)) return applyFinalNew(r, dev, raw, opts, isTest);
-  if (mArrF) return applyFinalNew(r, dev, raw, opts, isTest);
-  return applyArrival(r, s, isTest, raw, opts, mArr ? 'newarr' : 'newbus', dev);
+  if (mBusAt && /Route complete\.\s*$/.test(msg)) return applyFinalNew(r, dev, raw, opts, isTest, m[2] || '');
+  if (mArrF) return applyFinalNew(r, dev, raw, opts, isTest, m[2] || '');
+  return applyArrival(r, s, isTest, raw, opts, mArr ? 'newarr' : 'newbus', dev, m[2] || '');
 }
 function applyWaiting(r, s, dev, rawMsg, opts, isTest, label) {
   var evTime = (opts && opts.time) ? new Date(opts.time) : new Date();
@@ -1289,11 +1332,11 @@ function applyGotOff(r, s, dev, rawMsg, opts, isTest, label) {
   if (r === route) renderRoute();
   return added;
 }
-function applyFinalNew(r, dev, rawMsg, opts, isTest) {
+function applyFinalNew(r, dev, rawMsg, opts, isTest, lblF) {
   var list = (r === 'AM') ? AM_STOPS : PM_STOPS;
   var whenF = (opts && opts.time) ? new Date(opts.time) : new Date();
   var added = recordEvent(r, list[list.length - 1], isTest, rawMsg, true,
-                          opts && opts.time, opts && opts.deferUI, dev, 'newfinal');
+                          opts && opts.time, opts && opts.deferUI, dev, 'newfinal', lblF ? { label: lblF } : undefined);
   if (viewDate || (opts && opts.silent)) return added;
   if (torontoDateKey(whenF) !== torontoDateKey(new Date())) return added;
   var st = state[r];
@@ -1303,6 +1346,10 @@ function applyFinalNew(r, dev, rawMsg, opts, isTest) {
   var dst = devRouteState(dev, r);
   dst.complete = true; dst.busIdx = list.length - 1; dst.lastUpdate = whenF; dst.waiting = null;
   dst.reached[keyF] = true;
+  if (r === 'PM') {
+    dst.arrLabel = lblF || '';
+    if (!isTest) { st.arrLabel = lblF || ''; var ndF2 = calcArrivalDelay(r, list[list.length - 1], whenF); if (ndF2 !== null) { dst.delaySec = ndF2; st.delaySec = ndF2; } }
+  }
   lastRoute = r;
   if (isDevSelected(dev)) addLog((isTest ? '[TEST] ' : '') + rawMsg + busSwitchHint(r) + (isTest ? '' : arrivalDelaySuffix(dst.delaySec, r)),
          (isTest ? 'TEST ' : '') + r, isTest ? 'test' : r.toLowerCase(), opts && opts.time);
