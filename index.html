@@ -71,7 +71,7 @@
 </head>
 <body>
 <header>
-  <h1>&#x1F68C; Bus Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v6.15</span></h1>
+  <h1>&#x1F68C; Bus Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v6.16</span></h1>
   <div class="seg">
     <button id="btnAM" class="on">AM</button>
     <button id="btnPM">PM</button>
@@ -98,7 +98,7 @@
 <section>
   <h2>Channel</h2>
   <div class="row">
-    <input type="text" id="topicInput" placeholder="ntfy channel name" autocomplete="off" value="11-Bus-107-135-gh45lt" />
+    <input type="text" id="topicInput" placeholder="ntfy channel name" autocomplete="off" value="12-Bus-107-135-gh45lt" />
     <button class="act" id="connBtn">Connect</button>
     <button class="act ghost" id="refreshBtn" title="Re-check for new alerts">↻</button>
   </div>
@@ -832,10 +832,10 @@ var topicInput = document.getElementById('topicInput');
 var connBtn = document.getElementById('connBtn');
 var connDot = document.getElementById('connDot');
 // Hardcoded default channel (editable); localStorage overrides if user changed it
-var HARDCODED_TOPIC = '11-Bus-107-135-gh45lt';
+var HARDCODED_TOPIC = '12-Bus-107-135-gh45lt';
 // One-time migration: old channels -> new channel (2026-10-04)
 (function migrateTopic() {
-  var olds = ['bus-alerts-01-hdkdhsjbd', 'bus-alerts-zpxz5jrwzkl4pwoo', 'bus-alerts-zpxz5jrwzkl4pwoo-01', '00-Bus-107-135-gh45lt', '10-Bus-107-135-gh45lt', '11-Bus-107-135-gh45lt', 'bus-alerts-02-hdkdhsjbd', 'bus-alerts-00-hdkdhsjbd', 'bus-alerts-00-hdkdhsjbd', 'bus-alerts-00-hdkdhsjbd', 'bus-alerts-00-hdkdhsjbd',
+  var olds = ['bus-alerts-01-hdkdhsjbd', 'bus-alerts-zpxz5jrwzkl4pwoo', 'bus-alerts-zpxz5jrwzkl4pwoo-01', '00-Bus-107-135-gh45lt', '10-Bus-107-135-gh45lt', '11-Bus-107-135-gh45lt', '12-Bus-107-135-gh45lt', 'bus-alerts-02-hdkdhsjbd', 'bus-alerts-00-hdkdhsjbd', 'bus-alerts-00-hdkdhsjbd', 'bus-alerts-00-hdkdhsjbd', 'bus-alerts-00-hdkdhsjbd',
     'bus-alerts-03-hdkdhsjbd', 'bus-alerts-04-hdkdhsjbd', 'bus-alerts-05-hdkdhsjbd', 'bus-alerts-06-hdkdhsjbd', 'bus-alerts-07-hdkdhsjbd',
     'bus-alerts-08-hdkdhsjbd'];
   var cur = localStorage.getItem('busfollower_topic');
