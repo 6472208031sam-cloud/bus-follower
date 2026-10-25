@@ -71,7 +71,7 @@
 </head>
 <body>
 <header>
-  <h1>&#x1F68C; St Cecilia Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v5.12</span></h1>
+  <h1>&#x1F68C; St Cecilia Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v5.13</span></h1>
   <div class="seg">
     <button id="btnAM" class="on">AM</button>
     <button id="btnPM">PM</button>
@@ -742,6 +742,18 @@ function renderStatus() {
     line.textContent = 'Bus at ' + stopShort(s) + ' of ' + list.length;
     sub.textContent = (route === 'AM' && s.t ? s.t + ' \u00B7 ' : '') +
       'Last update: ' + (st.lastUpdate ? st.lastUpdate.toLocaleTimeString() : '\u2014');
+  } else if (st.onBus) {
+    var obStopObj = stopByKey(route, String(st.onBus.stop));
+    var obDevLbl = '';
+    try {
+      (function(){ try { return knownDevices() || []; } catch(e){ return []; } })().forEach(function (d) {
+        var ds = devDisplayState(route, d);
+        if (ds.onBus && !obDevLbl) obDevLbl = devLabel(d);
+      });
+    } catch (e) {}
+    var _obLblAgg = st.onBus.label ? ' (' + st.onBus.label + ')' : '';
+    line.textContent = '\uD83D\uDCF1 ' + (obDevLbl ? '[' + obDevLbl + ']' + _obLblAgg + ' ' : '') + 'On bus \u2014 heading to Stop ' + (st.onBus.disp || st.onBus.stop) + onBusPillSuffix(st.delaySec, obStopObj);
+    sub.textContent = st.onBus.time ? ('Last update: ' + st.onBus.time.toLocaleTimeString()) : '';
   } else {
     line.textContent = 'No bus updates yet';
     sub.textContent = st.lastUpdate ? ('Last update: ' + st.lastUpdate.toLocaleTimeString())
