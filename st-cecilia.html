@@ -71,7 +71,7 @@
 </head>
 <body>
 <header>
-  <h1>&#x1F68C; St Cecilia Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v5.11</span></h1>
+  <h1>&#x1F68C; St Cecilia Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v5.12</span></h1>
   <div class="seg">
     <button id="btnAM" class="on">AM</button>
     <button id="btnPM">PM</button>
@@ -330,7 +330,7 @@ function renderStatusFiltered(list) {
     sub.textContent = (route === 'AM' && s.t ? s.t + ' \u00B7 ' : '') +
       'Last update: ' + (best.lastUpdate ? best.lastUpdate.toLocaleTimeString() : '\u2014');
   } else if (best.onBus) {
-    line.textContent = '\uD83D\uDCF1 [' + devLabel(bestDev) + '] On bus \u2014 heading to Stop ' + (best.onBus.disp || best.onBus.stop) + onBusPillSuffix(best.delaySec, stopByKey(route, String(best.onBus.stop)));
+    line.textContent = '\uD83D\uDCF1 [' + devLabel(bestDev) + ']' + (best.onBus.label ? ' (' + best.onBus.label + ')' : '') + ' On bus \u2014 heading to Stop ' + (best.onBus.disp || best.onBus.stop) + onBusPillSuffix(best.delaySec, stopByKey(route, String(best.onBus.stop)));
     sub.textContent = best.onBus.time ? ('Last update: ' + best.onBus.time.toLocaleTimeString()) : '';
   } else {
     line.textContent = 'No bus updates yet';
@@ -413,7 +413,7 @@ function stateFromEvents(r, events) {
         if (wIdx > st.busIdx) st.busIdx = wIdx;
       }
       st.waiting = null;
-      st.onBus = { stop: key, disp: ev.disp || key, time: t };
+      st.onBus = { stop: key, disp: ev.disp || key, time: t, label: ev.label };
       if (!ev.test) { var ndOb = calcOnBusDelay(r, key, t); if (ndOb !== null) st.delaySec = ndOb; }
       return;
     }
@@ -1063,7 +1063,7 @@ function handleMessage(raw, opts) {
     registerDevice(_devOb);
     // Record the on-bus event (kind 'onbus') so reloads, backfill and the
     // date picker derive the same delay readings as the live session.
-    var _addedOb = _sOb ? recordEvent(_rOb, _sOb, isTest, raw, false, opts && opts.time, opts && opts.deferUI, _devOb, 'onbus', { disp: _dispOb }) : false;
+    var _addedOb = _sOb ? recordEvent(_rOb, _sOb, isTest, raw, false, opts && opts.time, opts && opts.deferUI, _devOb, 'onbus', { disp: _dispOb, label: _labelOb }) : false;
     if (viewDate) return _addedOb; // history mode: accumulate silently
     if (opts && opts.silent) return _addedOb; // backfill: rendering deferred to the end
     if (torontoDateKey(_evTimeOb) !== torontoDateKey(new Date())) return _addedOb; // previous-day: history only
@@ -1090,12 +1090,12 @@ function handleMessage(raw, opts) {
           try { _awIdx = _listOb.findIndex(function(s) { return _keyOb(s) === String(state[_rOb].waiting); }); } catch (e) {}
           if (_awIdx > state[_rOb].busIdx) state[_rOb].busIdx = _awIdx;
         }
-        state[_rOb].waiting = null; state[_rOb].onBus = { stop: _tokOb, disp: _dispOb, time: _evTimeOb };
+        state[_rOb].waiting = null; state[_rOb].onBus = { stop: _tokOb, disp: _dispOb, time: _evTimeOb, label: _labelOb };
         if (!isTest && _dsOb) state[_rOb].delaySec = _dsOb.delaySec;
       }
     } catch (e) {}
     if (isDevSelected(_devOb)) {
-      addLog((isTest ? '[TEST] ' : '') + '\uD83D\uDCF1 [' + _devOb + '] on bus \u2014 heading to Stop ' + _dispOb + '.' +
+      addLog((isTest ? '[TEST] ' : '') + '\uD83D\uDCF1 [' + _devOb + ']' + (_labelOb ? ' (' + _labelOb + ')' : '') + ' on bus \u2014 heading to Stop ' + _dispOb + '.' +
         (isTest ? '' : onBusDelaySuffix(_dsOb ? _dsOb.delaySec : null, _sOb)),
         (isTest ? 'TEST ' : '') + _rOb, isTest ? 'test' : _rOb.toLowerCase(), opts && opts.time);
     }
@@ -1347,7 +1347,7 @@ function logEntryFromEvent(r, ev) {
   var devTag = (ev.dev && ev.dev !== DEV_UNKNOWN) ? ' [' + ev.dev + ']' : '';
   var txt, tagCls = ev.test ? 'test' : r.toLowerCase();
   if (ev.kind === 'onbus') {
-    txt = (ev.test ? '[TEST] ' : '') + '\uD83D\uDCF1 [' + (ev.dev || '?') + '] on bus \u2014 heading to Stop ' + (ev.disp || ev.letter) + '.';
+    txt = (ev.test ? '[TEST] ' : '') + '\uD83D\uDCF1 [' + (ev.dev || '?') + ']' + (ev.label ? ' (' + ev.label + ')' : '') + ' on bus \u2014 heading to Stop ' + (ev.disp || ev.letter) + '.';
   } else if (ev.kind === 'wait' || ev.kind === 'off' || ev.kind === 'newbus' || ev.kind === 'newarr' || ev.kind === 'newfinal') {
     txt = (ev.test ? '[TEST] ' : '') + ev.msg; // verbatim: preserves icon + device ID
   } else {
