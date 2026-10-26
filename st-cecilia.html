@@ -71,7 +71,7 @@
 </head>
 <body>
 <header>
-  <h1>&#x1F68C; St Cecilia Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v5.17</span></h1>
+  <h1>&#x1F68C; St Cecilia Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v5.18</span></h1>
   <div class="seg">
     <button id="btnAM" class="on">AM</button>
     <button id="btnPM">PM</button>
@@ -99,7 +99,7 @@
 <section>
   <h2>Channel</h2>
   <div class="row">
-    <input type="text" id="topicInput" placeholder="ntfy channel name" autocomplete="off" value="00-St-Celia-gh45lt-Stc" />
+    <input type="text" id="topicInput" placeholder="ntfy channel name" autocomplete="off" value="00-St-Celia-gh45lt-Stc" readonly />
     <button class="act" id="connBtn">Connect</button>
     <button class="act ghost" id="refreshBtn" title="Re-check for new alerts">↻</button>
   </div>
@@ -831,28 +831,17 @@ function setRoute(r) {
 var topicInput = document.getElementById('topicInput');
 var connBtn = document.getElementById('connBtn');
 var connDot = document.getElementById('connDot');
-// Hardcoded default channel (editable); localStorage overrides if user changed it
+// Built-in channel — the only authority (the input below is a read-only display)
 var HARDCODED_TOPIC = '00-St-Celia-gh45lt-Stc';
-// One-time migration: old channels -> new channel (2026-10-04)
-(function migrateTopic() {
-  var olds = ['stcecilia-alerts-01-hdke67hang', 'stcecilia-alerts-355e33bfc71fdaf3', 'stcecilia-alerts-01-hdke67', 'stcecilia-alerts-02-hdke67hang', 'stcecilia-alerts-00-hdke67hang', 'stcecilia-alerts-00-hdke67hang', 'stcecilia-alerts-00-hdke67hang', 'stcecilia-alerts-00-hdke67hang', 'stcecilia-alerts-07-hdke67hang', 'stcecilia-alerts-08-hdke67hang', 'stcecilia-alerts-09-hdke67hang', 'stcecilia-alerts-10-hdke67hang', 'stcecilia-alerts-11-hdke67hang', 'stcecilia-alerts-12-hdke67hang', 'stcecilia-alerts-13-hdke67hang', 'stcecilia-alerts-14-hdke67hang', 'stcecilia-alerts-15-hdke67hang', 'stcecilia-alerts-16-hdke67hang', 'stcecilia-alerts-17-hdke67hang', 'stcecilia-alerts-18-hdke67hang', 'stcecilia-alerts-19-hdke67hang',
-    'stcecilia-alerts-20-hdke67hang',
-    'stcecilia-alerts-22-hdke67hang',
-    'stcecilia-alerts-00-hdke67hang',
-    'stcecilia-alerts-00-hdke67hang',
-    'stcecilia-alerts-03-hdke67hang', 'stcecilia-alerts-04-hdke67hang', 'stcecilia-alerts-05-hdke67hang', 'stcecilia-alerts-06-hdke67hang', 'stcecilia-alerts-21-hdke67hang', 'stcecilia-alerts-23-hdke67hang', '00-St-Celia-gh45lt-Stc', '10-St-Celia-gh45lt-Stc', '11-St-Celia-gh45lt-Stc', '12-St-Celia-gh45lt-Stc'];
-  var cur = localStorage.getItem('stceciliafollower_topic');
-  if (olds.indexOf(cur) !== -1) {
-    localStorage.setItem('stceciliafollower_topic', HARDCODED_TOPIC);
-  }
-})();
-topicInput.value = localStorage.getItem('stceciliafollower_topic') || HARDCODED_TOPIC;
+// Channel cleanup (v5.18): the built-in channel is the only authority.
+// Overwrite any stale stored channel once at startup; the input only displays it.
+try { localStorage.setItem('stceciliafollower_topic', HARDCODED_TOPIC); } catch (e) {}
+topicInput.value = HARDCODED_TOPIC;
 connBtn.addEventListener('click', function () { evtSrc ? disconnect() : connect(); });
 topicInput.addEventListener('keydown', function (e) { if (e.key === 'Enter' && !evtSrc) connect(); });
 // Manual refresh button: re-backfill shared history
 document.getElementById('refreshBtn').addEventListener('click', function () {
-  var topic = topicInput.value.trim();
-  if (!topic) return;
+  var topic = HARDCODED_TOPIC;
   addLog('Checking for new alerts…', 'SYNC', '');
   backfillFromNtfy(topic).then(function (msgs) {
     var n = 0;
@@ -867,15 +856,15 @@ document.getElementById('refreshBtn').addEventListener('click', function () {
     addLog('Refresh failed: ' + (e && e.message ? e.message : e), 'SYNC', 'warn');
   });
 });
-// Auto-connect on load if a topic is saved
-if (topicInput.value.trim()) {
+// Auto-connect on load
+if (HARDCODED_TOPIC) {
   setTimeout(function () { connect(); }, 500);
 }
 // Re-backfill when tab becomes visible again (mobile browsers suspend SSE in background tabs)
 document.addEventListener('visibilitychange', function () {
-  if (!document.hidden && topicInput.value.trim() && evtSrc) {
+  if (!document.hidden && HARDCODED_TOPIC && evtSrc) {
     // Tab is visible again: refresh shared history to catch anything missed while suspended
-    backfillFromNtfy(topicInput.value.trim()).then(function (msgs) {
+    backfillFromNtfy(HARDCODED_TOPIC).then(function (msgs) {
       var n = 0;
       msgs.forEach(function (m) {
         var iso = new Date(m.time * 1000).toISOString();
@@ -995,9 +984,7 @@ function backfillFromNtfy(topic) {
     });
 }
 function connect() {
-  var topic = topicInput.value.trim();
-  if (!topic) { addLog('Enter a channel name first.', null, ''); return; }
-  localStorage.setItem('stceciliafollower_topic', topic);
+  var topic = HARDCODED_TOPIC;
   disconnect();
   connBtn.disabled = true;
   setConn(false, false);

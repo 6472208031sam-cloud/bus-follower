@@ -73,7 +73,7 @@
 </head>
 <body>
 <header>
-  <h1>&#x1F68C; Bus Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v6.19</span></h1>
+  <h1>&#x1F68C; Bus Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v6.20</span></h1>
   <div class="seg">
     <button id="btnAM" class="on">AM</button>
     <button id="btnPM">PM</button>
@@ -100,7 +100,7 @@
 <section>
   <h2>Channel</h2>
   <div class="row">
-    <input type="text" id="topicInput" placeholder="ntfy channel name" autocomplete="off" value="00-Bus-107-135-gh45lt" />
+    <input type="text" id="topicInput" placeholder="ntfy channel name" autocomplete="off" value="00-Bus-107-135-gh45lt" readonly />
     <button class="act" id="connBtn">Connect</button>
     <button class="act ghost" id="refreshBtn" title="Re-check for new alerts">↻</button>
   </div>
@@ -847,25 +847,17 @@ function setRoute(r) {
 var topicInput = document.getElementById('topicInput');
 var connBtn = document.getElementById('connBtn');
 var connDot = document.getElementById('connDot');
-// Hardcoded default channel (editable); localStorage overrides if user changed it
+// Built-in channel — the only authority (the input below is a read-only display)
 var HARDCODED_TOPIC = '00-Bus-107-135-gh45lt';
-// One-time migration: old channels -> new channel (2026-10-04)
-(function migrateTopic() {
-  var olds = ['bus-alerts-01-hdkdhsjbd', 'bus-alerts-zpxz5jrwzkl4pwoo', 'bus-alerts-zpxz5jrwzkl4pwoo-01', '00-Bus-107-135-gh45lt', '10-Bus-107-135-gh45lt', '11-Bus-107-135-gh45lt', '12-Bus-107-135-gh45lt', 'bus-alerts-02-hdkdhsjbd', 'bus-alerts-00-hdkdhsjbd', 'bus-alerts-00-hdkdhsjbd', 'bus-alerts-00-hdkdhsjbd', 'bus-alerts-00-hdkdhsjbd',
-    'bus-alerts-03-hdkdhsjbd', 'bus-alerts-04-hdkdhsjbd', 'bus-alerts-05-hdkdhsjbd', 'bus-alerts-06-hdkdhsjbd', 'bus-alerts-07-hdkdhsjbd',
-    'bus-alerts-08-hdkdhsjbd'];
-  var cur = localStorage.getItem('busfollower_topic');
-  if (olds.indexOf(cur) !== -1) {
-    localStorage.setItem('busfollower_topic', HARDCODED_TOPIC);
-  }
-})();
-topicInput.value = localStorage.getItem('busfollower_topic') || HARDCODED_TOPIC;
+// Channel cleanup (v6.20): the built-in channel is the only authority.
+// Overwrite any stale stored channel once at startup; the input only displays it.
+try { localStorage.setItem('busfollower_topic', HARDCODED_TOPIC); } catch (e) {}
+topicInput.value = HARDCODED_TOPIC;
 connBtn.addEventListener('click', function () { evtSrc ? disconnect() : connect(); });
 topicInput.addEventListener('keydown', function (e) { if (e.key === 'Enter' && !evtSrc) connect(); });
 // Manual refresh button: re-backfill shared history
 document.getElementById('refreshBtn').addEventListener('click', function () {
-  var topic = topicInput.value.trim();
-  if (!topic) return;
+  var topic = HARDCODED_TOPIC;
   addLog('Checking for new alerts…', 'SYNC', '');
   backfillFromNtfy(topic).then(function (msgs) {
     var n = 0;
@@ -880,15 +872,15 @@ document.getElementById('refreshBtn').addEventListener('click', function () {
     addLog('Refresh failed: ' + (e && e.message ? e.message : e), 'SYNC', 'warn');
   });
 });
-// Auto-connect on load if a topic is saved
-if (topicInput.value.trim()) {
+// Auto-connect on load
+if (HARDCODED_TOPIC) {
   setTimeout(function () { connect(); }, 500);
 }
 // Re-backfill when tab becomes visible again (mobile browsers suspend SSE in background tabs)
 document.addEventListener('visibilitychange', function () {
-  if (!document.hidden && topicInput.value.trim() && evtSrc) {
+  if (!document.hidden && HARDCODED_TOPIC && evtSrc) {
     // Tab is visible again: refresh shared history to catch anything missed while suspended
-    backfillFromNtfy(topicInput.value.trim()).then(function (msgs) {
+    backfillFromNtfy(HARDCODED_TOPIC).then(function (msgs) {
       var n = 0;
       msgs.forEach(function (m) {
         var iso = new Date(m.time * 1000).toISOString();
@@ -1008,9 +1000,7 @@ function backfillFromNtfy(topic) {
     });
 }
 function connect() {
-  var topic = topicInput.value.trim();
-  if (!topic) { addLog('Enter a channel name first.', null, ''); return; }
-  localStorage.setItem('busfollower_topic', topic);
+  var topic = HARDCODED_TOPIC;
   disconnect();
   connBtn.disabled = true;
   setConn(false, false);
