@@ -49,6 +49,7 @@
   .pin.done { background:var(--green); color:#fff; }
   .pin.next { box-shadow:0 0 0 4px rgba(53,208,127,.45); }
   .pin.skipped { background:#e5e7eb; border-color:#9ca3af; color:#9ca3af; }
+  .pin.wide { width:58px; border-radius:999px; font-size:.72rem; }
   .busdot { width:22px; height:22px; border-radius:50%; background:#2f8bff; border:3px solid #fff; box-shadow:0 0 0 3px rgba(47,139,255,.4), 0 2px 8px rgba(0,0,0,.5); }
   .arrivedlbl { background:var(--green); color:#fff; font-weight:800; font-size:15px; padding:5px 16px; border-radius:18px; text-align:center; white-space:nowrap; box-shadow:0 2px 6px rgba(0,0,0,.35); }
   .datebar { display:flex; align-items:center; gap:8px; padding:8px 14px; background:#0d1712; border-bottom:1px solid #223129; }
@@ -71,7 +72,7 @@
 </head>
 <body>
 <header>
-  <h1>&#x1F68C; Bus Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v6.17</span></h1>
+  <h1>&#x1F68C; Bus Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v6.18</span></h1>
   <div class="seg">
     <button id="btnAM" class="on">AM</button>
     <button id="btnPM">PM</button>
@@ -452,7 +453,12 @@ function restoreToday() {
 function stops() { return route === 'AM' ? AM_STOPS : PM_STOPS; }
 function path()  { return route === 'AM' ? AM_PATH  : PM_PATH; }
 function stopKey(s) { return route === 'AM' ? String(s.n) : s.letter; }
-function stopShort(s) { return route === 'AM' ? ('Stop ' + s.n) : ('Stop ' + s.letter + ' (' + s.am + ')'); }
+function stopShort(s) { return route === 'AM' ? ('Stop ' + s.n) : ('Stop ' + dispLetterOf(s) + ' (' + s.am + ')'); }
+// Display-only: the PM school stop's letter is 'S' — that value is the
+// functional key every message match and lookup uses, so the DATA never
+// changes; only what the GUI prints. Rendered labels call this instead
+// of s.letter directly.
+function dispLetterOf(s) { return (s && s.letter === 'S') ? 'School' : (s ? s.letter : ''); }
 function stopByKey(r, key) { var f = null; var l = (r === 'AM') ? AM_STOPS : PM_STOPS;
   l.forEach(function (s) { if ((r === 'AM' ? String(s.n) : s.letter) === key) f = s; }); return f; }
 /* ===== Minutes Behind =====
@@ -579,9 +585,10 @@ L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
 var routeLine = null, pinLayer = null, busMarker = null;
 
 function pinIcon(s, cls) {
-  var label = route === 'AM' ? s.n : s.letter;
-  return L.divIcon({ className: '', html: '<div class="pin ' + cls + '">' + label + '</div>',
-                     iconSize: [28, 28], iconAnchor: [14, 14] });
+  var label = route === 'AM' ? s.n : dispLetterOf(s);
+  var wide = String(label).length > 2;
+  return L.divIcon({ className: '', html: '<div class="pin ' + cls + (wide ? ' wide' : '') + '">' + label + '</div>',
+                     iconSize: wide ? [58, 28] : [28, 28], iconAnchor: wide ? [29, 14] : [14, 14] });
 }
 
 function renderRoute() {
@@ -1255,7 +1262,7 @@ function applyArrival(r, s, isTest, rawMsg, opts, kind, devArg, lblArg) {
     dst.arrLabel = lblArg || '';
     if (!isTest) { st.arrLabel = lblArg || ''; var ndA = calcArrivalDelay(r, s, evTime); if (ndA !== null) { dst.delaySec = ndA; st.delaySec = ndA; } }
   }
-  var label = r === 'AM' ? ('Stop ' + s.n) : ('Stop ' + s.letter + ' (' + s.am + ')');
+  var label = r === 'AM' ? ('Stop ' + s.n) : ('Stop ' + dispLetterOf(s) + ' (' + s.am + ')');
   if (isDevSelected(dev)) {
     var logText = (kind === 'newbus' || kind === 'newarr')
       ? ((isTest ? '[TEST] ' : '') + rawMsg + busSwitchHint(r)) // verbatim: already has icon + device ID
@@ -1408,7 +1415,7 @@ function logEntryFromEvent(r, ev) {
   var t = new Date(ev.time).toLocaleTimeString('en-CA', {
     timeZone: 'America/Toronto', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false
   });
-  var label = (r === 'AM') ? ('Stop ' + ev.stop) : ('Stop ' + ev.letter + ' (' + ev.stop + ')');
+  var label = (r === 'AM') ? ('Stop ' + ev.stop) : ('Stop ' + (ev.letter === 'S' ? 'School' : ev.letter) + ' (' + ev.stop + ')');
   var devTag = (ev.dev && ev.dev !== DEV_UNKNOWN) ? ' [' + ev.dev + ']' : '';
   var txt, tagCls = ev.test ? 'test' : r.toLowerCase();
   if (ev.kind === 'onbus') {
