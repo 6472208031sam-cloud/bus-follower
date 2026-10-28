@@ -73,7 +73,7 @@
 </head>
 <body>
 <header>
-  <h1>&#x1F68C; Bus Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v6.20</span></h1>
+  <h1>&#x1F68C; Bus Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v6.21</span></h1>
   <div class="seg">
     <button id="btnAM" class="on">AM</button>
     <button id="btnPM">PM</button>
@@ -843,6 +843,34 @@ function setRoute(r) {
   renderRoute();
 }
 
+/* ===== Route auto-follow (v6.21) =====
+   The tab follows today's live events: every apply path switches to the
+   event's route once the event clears the history/silent/previous-day
+   guards. The starting tab is today's latest event's route, or the
+   Toronto clock (AM before noon, PM from noon) when today has none. */
+function torontoHour(d) {
+  try {
+    var parts = new Intl.DateTimeFormat('en-US', { timeZone: 'America/Toronto', hour: 'numeric', hourCycle: 'h23' }).formatToParts(d);
+    for (var i = 0; i < parts.length; i++) { if (parts[i].type === 'hour') return parseInt(parts[i].value, 10) % 24; }
+  } catch (e) {}
+  return d.getHours();
+}
+function applyStartingRoute() {
+  if (viewDate) return; // history view keeps the user's tab
+  var day = loadHistory()[torontoDateKey(new Date())];
+  var best = null, bestT = -1;
+  if (day) {
+    [['am', 'AM'], ['pm', 'PM']].forEach(function (pair) {
+      (day[pair[0]] || []).forEach(function (e) {
+        var t = new Date(e.time).getTime();
+        if (t > bestT) { bestT = t; best = pair[1]; }
+      });
+    });
+  }
+  var target = best || (torontoHour(new Date()) < 12 ? 'AM' : 'PM');
+  if (target !== route) setRoute(target);
+}
+
 /* ===== ntfy via SSE ===== */
 var topicInput = document.getElementById('topicInput');
 var connBtn = document.getElementById('connBtn');
@@ -866,12 +894,15 @@ document.getElementById('refreshBtn').addEventListener('click', function () {
       if (handleMessage(m.message, { time: iso, silent: true, deferUI: true })) n++;
     });
     refreshDatePicker();
+    applyStartingRoute();
     if (!viewDate) { rebuildLiveLog(); renderRoute(); }
     addLog(n > 0 ? ('Found ' + n + ' new alert' + (n === 1 ? '' : 's') + '.') : 'No new alerts.', 'SYNC', '');
   }).catch(function (e) {
     addLog('Refresh failed: ' + (e && e.message ? e.message : e), 'SYNC', 'warn');
   });
 });
+// Starting tab (v6.21): today's latest event's route, else the Toronto clock
+applyStartingRoute();
 // Auto-connect on load
 if (HARDCODED_TOPIC) {
   setTimeout(function () { connect(); }, 500);
@@ -888,6 +919,7 @@ document.addEventListener('visibilitychange', function () {
       });
       if (n > 0) {
         refreshDatePicker();
+        applyStartingRoute();
         if (!viewDate) { rebuildLiveLog(); renderRoute(); }
         addLog('Caught up: ' + n + ' new alert' + (n === 1 ? '' : 's') + ' while away.', 'SYNC', '');
       }
@@ -1122,6 +1154,7 @@ function handleMessage(raw, opts) {
     if (viewDate) return _addedOb; // history mode: accumulate silently
     if (opts && opts.silent) return _addedOb; // backfill: rendering deferred to the end
     if (torontoDateKey(_evTimeOb) !== torontoDateKey(new Date())) return _addedOb; // previous-day: history only
+    if (_rOb !== route) setRoute(_rOb); // route auto-follow (v6.21)
     var _dsOb = null;
     try {
       _dsOb = devRouteState(_devOb, _rOb);
@@ -1199,7 +1232,6 @@ function handleMessage(raw, opts) {
     return applyArrival(rr, sL, isTest, raw, opts);
   } else if (mFinal) {
     var r = mFinalAM ? 'AM' : (mFinalPM ? 'PM' : (lastRoute || route));
-    if (r !== route) setRoute(r);
     var st = state[r], list = r === 'AM' ? AM_STOPS : PM_STOPS;
     var whenF = (opts && opts.time) ? new Date(opts.time) : new Date();
     var devMatchF = String(raw || '').match(/\[([AiW][0-9]{2})\]\s*$/);
@@ -1210,6 +1242,7 @@ function handleMessage(raw, opts) {
                              opts && opts.time, opts && opts.deferUI, devF);
     if (viewDate || silent) return addedF;
     if (torontoDateKey(whenF) !== torontoDateKey(new Date())) return addedF;
+    if (r !== route) setRoute(r); // route auto-follow (v6.21): guarded switch, after the date checks
     st.complete = true; st.busIdx = list.length - 1; st.lastUpdate = whenF;
     var keyF = stopKey(list[list.length - 1]);
     st.reached[keyF] = true;
@@ -1244,6 +1277,7 @@ function applyArrival(r, s, isTest, rawMsg, opts, kind, devArg, lblArg) {
   if (viewDate) return added; // history mode: accumulate silently, don't touch the display
   if (opts && opts.silent) return added; // backfill: rendering deferred to the end
   if (isOld) return added; // previous-day event: history only, no live UI update
+  if (r !== route) setRoute(r); // route auto-follow (v6.21)
   st.reached[key] = true;
   st.waiting = null; // boarded: clear any waiting state
   st.onBus = null; // arrived: clear on-bus state
@@ -1264,9 +1298,8 @@ function applyArrival(r, s, isTest, rawMsg, opts, kind, devArg, lblArg) {
   var label = r === 'AM' ? ('Stop ' + s.n) : ('Stop ' + dispLetterOf(s) + (s.am > 0 ? ' (' + s.am + ')' : ''));
   if (isDevSelected(dev)) {
     var logText = (kind === 'newbus' || kind === 'newarr')
-      ? ((isTest ? '[TEST] ' : '') + rawMsg + busSwitchHint(r)) // verbatim: already has icon + device ID
-      : ((isTest ? '[TEST] ' : '') + 'Bus reached ' + label + devId +
-         (r !== route ? ' \u2014 switch to ' + r + ' to follow' : ''));
+      ? ((isTest ? '[TEST] ' : '') + rawMsg) // verbatim: already has icon + device ID
+      : ((isTest ? '[TEST] ' : '') + 'Bus reached ' + label + devId + '');
     logText += isTest ? '' : arrivalDelaySuffix(dst.delaySec, r);
     addLog(logText, (isTest ? 'TEST ' : '') + r, isTest ? 'test' : r.toLowerCase(), opts && opts.time);
   }
@@ -1275,7 +1308,6 @@ function applyArrival(r, s, isTest, rawMsg, opts, kind, devArg, lblArg) {
 }
 
 /* ===== New "My Stop" formats (v3.6+) ===== */
-function busSwitchHint(r) { return (r !== route) ? ' \u2014 switch to ' + r + ' to follow' : ''; }
 function handleNewFormat(mWait, mOff, mBusAt, mArr, mArrF, msg, isTest, raw, opts, silent) {
   var m = mWait || mOff || mBusAt || mArr || mArrF;
   var dev = m[1];
@@ -1308,13 +1340,14 @@ function applyWaiting(r, s, dev, rawMsg, opts, isTest, label) {
   if (viewDate) return added; // history mode: accumulate silently, don't touch the display
   if (opts && opts.silent) return added; // backfill: rendering deferred to the end
   if (isOld) return added; // previous-day event: history only, no live UI update
+  if (r !== route) setRoute(r); // route auto-follow (v6.21)
   lastRoute = r;
   var key = (r === 'AM') ? String(s.n) : s.letter;
   var st = state[r];
   st.waiting = key; st.waitLabel = label || ''; st.lastUpdate = evTime; st.delaySec = null;
   var dst = devRouteState(dev, r);
   dst.waiting = key; dst.waitLabel = label || ''; dst.lastUpdate = evTime; dst.delaySec = null;
-  if (isDevSelected(dev)) addLog((isTest ? '[TEST] ' : '') + rawMsg + busSwitchHint(r),
+  if (isDevSelected(dev)) addLog((isTest ? '[TEST] ' : '') + rawMsg,
          (isTest ? 'TEST ' : '') + r, isTest ? 'test' : r.toLowerCase(), opts && opts.time);
   if (r === route) renderRoute();
   return added;
@@ -1327,13 +1360,14 @@ function applyGotOff(r, s, dev, rawMsg, opts, isTest, label) {
   if (viewDate) return added; // history mode: accumulate silently, don't touch the display
   if (opts && opts.silent) return added; // backfill: rendering deferred to the end
   if (isOld) return added; // previous-day event: history only, no live UI update
+  if (r !== route) setRoute(r); // route auto-follow (v6.21)
   lastRoute = r;
   var key = (r === 'AM') ? String(s.n) : s.letter;
   var st = state[r];
   st.reached[key] = true; st.done = true; st.offStop = key; st.offLabel = label || ''; st.waiting = null; st.lastUpdate = evTime; st.delaySec = null;
   var dst = devRouteState(dev, r);
   dst.reached[key] = true; dst.done = true; dst.offStop = key; dst.waiting = null; dst.lastUpdate = evTime; dst.delaySec = null;
-  if (isDevSelected(dev)) addLog((isTest ? '[TEST] ' : '') + rawMsg + busSwitchHint(r),
+  if (isDevSelected(dev)) addLog((isTest ? '[TEST] ' : '') + rawMsg,
          (isTest ? 'TEST ' : '') + r, isTest ? 'test' : r.toLowerCase(), opts && opts.time);
   if (r === route) renderRoute();
   return added;
@@ -1345,6 +1379,7 @@ function applyFinalNew(r, dev, rawMsg, opts, isTest, lblF) {
                           opts && opts.time, opts && opts.deferUI, dev, 'newfinal', lblF ? { label: lblF } : undefined);
   if (viewDate || (opts && opts.silent)) return added;
   if (torontoDateKey(whenF) !== torontoDateKey(new Date())) return added;
+  if (r !== route) setRoute(r); // route auto-follow (v6.21)
   var st = state[r];
   st.complete = true; st.busIdx = list.length - 1; st.lastUpdate = whenF; st.waiting = null;
   var keyF = (r === 'AM') ? String(list[list.length - 1].n) : list[list.length - 1].letter;
@@ -1357,7 +1392,7 @@ function applyFinalNew(r, dev, rawMsg, opts, isTest, lblF) {
     if (!isTest) { st.arrLabel = lblF || ''; var ndF2 = calcArrivalDelay(r, list[list.length - 1], whenF); if (ndF2 !== null) { dst.delaySec = ndF2; st.delaySec = ndF2; } }
   }
   lastRoute = r;
-  if (isDevSelected(dev)) addLog((isTest ? '[TEST] ' : '') + rawMsg + busSwitchHint(r) + (isTest ? '' : arrivalDelaySuffix(dst.delaySec, r)),
+  if (isDevSelected(dev)) addLog((isTest ? '[TEST] ' : '') + rawMsg + (isTest ? '' : arrivalDelaySuffix(dst.delaySec, r)),
          (isTest ? 'TEST ' : '') + r, isTest ? 'test' : r.toLowerCase(), opts && opts.time);
   if (r === route) renderRoute();
   return added;
