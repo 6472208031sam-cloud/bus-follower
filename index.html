@@ -79,7 +79,7 @@
 </head>
 <body>
 <header>
-  <h1>&#x1F68C; Bus Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v6.24</span></h1>
+  <h1>&#x1F68C; Bus Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v6.25</span></h1>
   <div class="seg">
     <button id="btnAM" class="on">AM</button>
     <button id="btnPM">PM</button>
@@ -696,6 +696,22 @@ function renderRoute() {
       icon: L.divIcon({ className: '', html: '<div class="gotofflbl">' + esc(agOffText) + '</div>', iconSize: [220, 32], iconAnchor: [110, -18] }),
       zIndexOffset: 1000, interactive: false
     }).addTo(map).bindPopup('<b>' + esc(agOffText) + '</b><br><i>Tracking stopped</i>');
+  } else if (st.waiting && st.busIdx < 0) {
+    var agWait = stopByKey(route, st.waiting);
+    // Find waiting device for the ID (same as status line)
+    var waitDevLbl = '';
+    try {
+      (function(){ try { return knownDevices() || []; } catch(e){ return []; } })().forEach(function (d) {
+        var dds = devDisplayState(route, d);
+        if (dds.waiting && !waitDevLbl) waitDevLbl = devLabel(d);
+      });
+    } catch (e) {}
+    var _wLbl = (st.waitLabel) ? ' (' + st.waitLabel + ')' : '';
+    var waitText = '\uD83D\uDCF1 ' + (waitDevLbl ? '[' + waitDevLbl + ']' + _wLbl + ' ' : '') + 'Waiting for bus at ' + (agWait ? stopShort(agWait) : 'Stop ' + st.waiting);
+    if (agWait) busMarker = L.marker([agWait.lat, agWait.lng], {
+      icon: L.divIcon({ className: '', html: '<div class="waitlbl" style="white-space:normal;line-height:1.3;padding:6px 14px;">' + esc(waitText) + '</div>', iconSize: [240, 52], iconAnchor: [120, -30] }),
+      zIndexOffset: 1000, interactive: false
+    }).addTo(map).bindPopup('<b>' + esc(waitText) + '</b>');
   } else if (st.busIdx >= 0 && st.busIdx < list.length) {
     var b = list[st.busIdx];
     busMarker = L.marker([b.lat, b.lng], {
