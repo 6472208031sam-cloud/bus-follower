@@ -16,12 +16,23 @@
   #log div { padding: 6px 0; border-bottom: 1px solid #eee; }
   .ok { color: #0b6e4f; } .err { color: #c00; }
   .row { display: flex; flex-wrap: wrap; gap: 4px; }
+  .watchcard { flex: 1; min-width: 140px; border: 2px solid #b45309; border-radius: 10px; padding: 12px 14px; }
+  .watchname { font-weight: 700; letter-spacing: .08em; font-size: .85rem; }
+  .watchnum { font-size: 2.2rem; font-weight: 800; line-height: 1.15; }
+  .watchsub { font-size: .8rem; opacity: .75; }
 </style>
 </head>
 <body>
-<h1>ntfy Alert Test <span style="font-size:0.6em;opacity:0.7;font-weight:normal;">v2.12</span></h1>
+<h1>ntfy Alert Test <span style="font-size:0.6em;opacity:0.7;font-weight:normal;">v2.13</span></h1>
 <p style="font-size:0.9rem;opacity:0.85;">Channel: <code id="chanName" style="background:#222;padding:0.15rem 0.5rem;border-radius:4px;user-select:all;"></code></p>
 <p>Sends <strong>TEST</strong> alerts to the channel saved in the Bus Follower page.</p>
+
+<h2>Watching now</h2>
+<div class="row" style="gap:10px;">
+  <div class="watchcard"><div class="watchname">BUS</div><div class="watchnum" id="watchBus">&ndash;</div><div class="watchsub" id="watchBusSub">connecting&hellip;</div></div>
+  <div class="watchcard"><div class="watchname">ST CECILIA</div><div class="watchnum" id="watchStc">&ndash;</div><div class="watchsub" id="watchStcSub">connecting&hellip;</div></div>
+</div>
+<p style="font-size:0.85rem;opacity:0.8;">Approximate &mdash; counts open follower pages by anonymous device ID (stored ID + fingerprint). Includes any follower page you have open yourself. Parents see nothing; the follower pages show no count.</p>
 
 <h2>Connectivity Test</h2>
 <p>Tap to verify your phone can reach ntfy.sh:</p>
@@ -288,6 +299,67 @@ function clearChannel() {
       btn.disabled = false;
     });
 }
+
+/* ===== Watching now (v2.13): follower presence counts =====
+   Followers ping W1|<uuid>|<fpHash> every 60 s (visible only) to
+   TOPIC + '-presence' / ST_TOPIC + '-presence'. This page only
+   listens: seed the last ~4 min by poll, subscribe live, and count
+   composite IDs heard within 3 min — aged by each message's own
+   ntfy timestamp, never by receipt time. This page never pings. */
+var WATCH = {
+  bus: { topic: TOPIC + '-presence', seen: {}, up: false },
+  stc: { topic: ST_TOPIC + '-presence', seen: {}, up: false }
+};
+function watchRecord(which, body, timeMs) {
+  var m = /^W1\|([^|]+)\|([0-9a-f]+)$/.exec(String(body || '').trim());
+  if (!m) return false;
+  WATCH[which].seen[m[1] + '|' + m[2]] = timeMs;
+  return true;
+}
+function watchPurge(nowMs) {
+  ['bus', 'stc'].forEach(function (k) {
+    var seen = WATCH[k].seen;
+    Object.keys(seen).forEach(function (id) { if (nowMs - seen[id] > 180000) delete seen[id]; });
+  });
+}
+function watchCount(which) { return Object.keys(WATCH[which].seen).length; }
+function watchRender() {
+  watchPurge(Date.now());
+  [['bus', 'watchBus', 'watchBusSub'], ['stc', 'watchStc', 'watchStcSub']].forEach(function (t) {
+    var numEl = document.getElementById(t[1]), subEl = document.getElementById(t[2]);
+    if (!numEl || !subEl) return;
+    if (!WATCH[t[0]].up) { numEl.textContent = '–'; subEl.textContent = 'unavailable'; }
+    else { numEl.textContent = String(watchCount(t[0])); subEl.textContent = 'watching · heard in the last 3 min'; }
+  });
+}
+function watchSeed(which) {
+  var w = WATCH[which];
+  var since = Math.floor(Date.now() / 1000) - 240;
+  fetch('https://ntfy.sh/' + encodeURIComponent(w.topic) + '/json?poll=1&since=' + since)
+    .then(function (r) { return r.text(); })
+    .then(function (txt) {
+      String(txt).split('\n').forEach(function (line) {
+        if (!line.trim()) return;
+        try { var o = JSON.parse(line); if (o.event === 'message') watchRecord(which, o.message, (o.time || 0) * 1000); } catch (e) {}
+      });
+      watchRender();
+    })
+    .catch(function () {});
+}
+function watchSubscribe(which) {
+  var w = WATCH[which];
+  var es = new EventSource('https://ntfy.sh/' + encodeURIComponent(w.topic) + '/sse');
+  es.onopen = function () { w.up = true; watchRender(); };
+  es.onerror = function () { w.up = false; watchRender(); };
+  es.onmessage = function (ev) {
+    try { var o = JSON.parse(ev.data); if (o.event === 'message') { watchRecord(which, o.message, (o.time || 0) * 1000); watchRender(); } } catch (e) {}
+  };
+}
+try { watchSeed('bus'); } catch (e) {}
+try { watchSeed('stc'); } catch (e) {}
+try { watchSubscribe('bus'); } catch (e) {}
+try { watchSubscribe('stc'); } catch (e) {}
+try { setInterval(watchRender, 5000); watchRender(); } catch (e) {}
 </script>
 </body>
 </html>

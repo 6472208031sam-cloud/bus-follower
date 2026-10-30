@@ -79,7 +79,7 @@
 </head>
 <body>
 <header>
-  <h1>&#x1F68C; Bus Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v6.23</span></h1>
+  <h1>&#x1F68C; Bus Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v6.24</span></h1>
   <div class="seg">
     <button id="btnAM" class="on">AM</button>
     <button id="btnPM">PM</button>
@@ -980,6 +980,73 @@ if (HARDCODED_TOPIC) {
   setTimeout(function () { connect(); }, 500);
 }
 // Re-backfill when tab becomes visible again (mobile browsers suspend SSE in background tabs)
+
+/* ===== Presence heartbeat =====
+   Publish-only: this page pings a derived "-presence" topic every
+   60 s while visible, so the test-alerts page can show a "Watching
+   now" count. Identity = persistent UUID (localStorage) combined
+   with a fingerprint hash, per the watching-now proposal. No
+   subscription, no display, nothing on the bus channel itself. */
+(function () {
+  try {
+    var PRES_TOPIC = HARDCODED_TOPIC + '-presence';
+    var wid = null;
+    try {
+      wid = localStorage.getItem('follower_watcher_id');
+      if (!wid) {
+        wid = (window.crypto && crypto.randomUUID) ? crypto.randomUUID()
+          : 'w' + Date.now().toString(36) + Math.random().toString(36).slice(2, 10) + Math.random().toString(36).slice(2, 10);
+        localStorage.setItem('follower_watcher_id', wid);
+      }
+    } catch (e) {
+      wid = 'w' + Date.now().toString(36) + Math.random().toString(36).slice(2, 12);
+    }
+    function fnv(str) {
+      var h = 0x811c9dc5;
+      for (var i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = (h * 0x01000193) >>> 0; }
+      return ('0000000' + h.toString(16)).slice(-8);
+    }
+    function fingerprint() {
+      var parts = [];
+      try { parts.push(navigator.userAgent || ''); } catch (e) { parts.push(''); }
+      try { parts.push(screen.width + 'x' + screen.height + 'x' + screen.colorDepth); } catch (e) { parts.push(''); }
+      try { parts.push(Intl.DateTimeFormat().resolvedOptions().timeZone || ''); } catch (e) { parts.push(''); }
+      try { parts.push(navigator.language || ''); } catch (e) { parts.push(''); }
+      try { parts.push(String(navigator.hardwareConcurrency || '')); } catch (e) { parts.push(''); }
+      try { parts.push(String(navigator.maxTouchPoints || 0)); } catch (e) { parts.push(''); }
+      try {
+        var cv = document.createElement('canvas');
+        var gl = cv.getContext('webgl') || cv.getContext('experimental-webgl');
+        var renderer = '';
+        if (gl) {
+          var ext = gl.getExtension('WEBGL_debug_renderer_info');
+          renderer = ext ? String(gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) || '') : String(gl.getParameter(gl.RENDERER) || '');
+        }
+        parts.push(renderer);
+      } catch (e) { parts.push(''); }
+      try {
+        var c2 = document.createElement('canvas'); c2.width = 120; c2.height = 30;
+        var ctx = c2.getContext('2d');
+        ctx.textBaseline = 'top'; ctx.font = '14px Arial';
+        ctx.fillStyle = '#f60'; ctx.fillRect(2, 2, 40, 12);
+        ctx.fillStyle = '#069'; ctx.fillText('watcher', 4, 4);
+        parts.push(fnv(c2.toDataURL()));
+      } catch (e) { parts.push(''); }
+      return fnv(parts.join('|'));
+    }
+    var FP = fingerprint();
+    function ping() {
+      if (document.hidden) return;
+      try {
+        fetch('https://ntfy.sh/' + encodeURIComponent(PRES_TOPIC), { method: 'POST', body: 'W1|' + wid + '|' + FP })
+          .then(function () {}, function () {});
+      } catch (e) {}
+    }
+    ping();
+    setInterval(ping, 60000);
+    document.addEventListener('visibilitychange', function () { if (!document.hidden) ping(); });
+  } catch (e) {}
+})();
 document.addEventListener('visibilitychange', function () {
   if (!document.hidden && HARDCODED_TOPIC && evtSrc) {
     // Tab is visible again: refresh shared history to catch anything missed while suspended
