@@ -23,7 +23,7 @@
 </style>
 </head>
 <body>
-<h1>ntfy Alert Test <span style="font-size:0.6em;opacity:0.7;font-weight:normal;">v2.13</span></h1>
+<h1>ntfy Alert Test <span style="font-size:0.6em;opacity:0.7;font-weight:normal;">v2.14</span></h1>
 <p style="font-size:0.9rem;opacity:0.85;">Channel: <code id="chanName" style="background:#222;padding:0.15rem 0.5rem;border-radius:4px;user-select:all;"></code></p>
 <p>Sends <strong>TEST</strong> alerts to the channel saved in the Bus Follower page.</p>
 
@@ -37,7 +37,8 @@
 <h2>Connectivity Test</h2>
 <p>Tap to verify your phone can reach ntfy.sh:</p>
 <div class="row">
-  <button onclick="window.open('https://ntfy.sh/' + TOPIC + '/json?since=24h', '_blank')">Test History API</button>
+  <button onclick="window.open('https://ntfy.sh/' + TOPIC + '/json?poll=1&since=24h', '_blank')">Test History API</button>
+  <button onclick="window.open('https://ntfy.sh/' + ST_TOPIC + '/json?poll=1&since=24h', '_blank')">Test History API — St Cecilia</button>
   <button onclick="window.open('https://ntfy.sh/' + TOPIC + '/sse', '_blank')">Test Live Stream</button>
 </div>
 <p style="font-size:0.85rem;opacity:0.8;">History should show JSON (or empty). Live stream will hang waiting — that's normal if it connects. If either fails, your network is blocking ntfy.sh.</p>
@@ -84,8 +85,8 @@ document.getElementById('chanName').textContent = TOPIC;
 var AM_STOPS = [[1, "ON WILLIAM CUTMORE AVE AT EVEREST CRES (NORTH ENTRANCE) AT PARK"], [2, "ON FORD STRATHY CRES - OPPOSITE 1411 AT BENCHES"], [3, "ON MEADOWRIDGE DR AT WHEAT BOOM DR (N/W CORNER)"], [4, "ON JOHN MCKAY BLVD - NORTH OF ANSON GATE AT WALKWAY"], [5, "ON THRESHING MILL BLVD AT MEADOW MARSH CRES (N/E CORNER)"], [6, "ON WHEAT BOOM DR - OPPOSITE 434 WHEAT BOOM DR AT PARK"], [7, "ON POSTRIDGE DR AT FAIRGATE WAY (N/W CORNER) - TRANSIT STYLE STOP"], [8, "ON CRIMSON OAK TRAIL - BETWEEN NICHOLS & CEDAR"], [9, "ON PONDVIEW PL - OPPOSITE 495 PONDVIEW PL AT PARK SIGN"], [10, "ON CORONATION DR AT NORTH RIDGE TRAIL (S/E CORNER) AT PARK"], [11, "ON CRAIGLEITH RD - OPPOSITE SYLVIA DR AT PARK (SOUTH SIDE)"], [12, "ON CRAIGLEITH RD AT MEADOWRIDGE DR (S/W CORNER)"], [13, "SCHOOL: ST MARGUERITE D'YOUVILLE CES - 1359 BAYSHIRE DR - BUS LOADING ZONE"]];
 var PM_STOPS = [["S", 13, "SCHOOL: ST MARGUERITE D'YOUVILLE CES - 1359 BAYSHIRE DR - BUS LOADING ZONE"], ["0", 0, "STOP 0"], ["01", 0, "STOP 01 - BIG TASTE"], ["02", 0, "STOP 02 - 8TH LINE"], ["A", 9, "ON PONDVIEW PL - OPPOSITE 495 PONDVIEW PL AT PARK SIGN"], ["B", 8, "ON CRIMSON OAK TRAIL - BETWEEN NICHOLS & CEDAR"], ["C", 10, "ON CORONATION DR AT NORTH RIDGE TRAIL (S/E CORNER) AT PARK"], ["D", 11, "ON CRAIGLEITH RD - OPPOSITE SYLVIA DR AT PARK (SOUTH SIDE)"], ["E", 12, "ON CRAIGLEITH RD AT MEADOWRIDGE DR (S/W CORNER)"], ["F", 1, "ON WILLIAM CUTMORE AVE AT EVEREST CRES (NORTH ENTRANCE) AT PARK"], ["G", 2, "ON FORD STRATHY CRES - OPPOSITE 1411 AT BENCHES"], ["H", 3, "ON MEADOWRIDGE DR AT WHEAT BOOM DR (N/W CORNER)"], ["I", 4, "ON JOHN MCKAY BLVD - NORTH OF ANSON GATE AT WALKWAY"], ["J", 5, "ON THRESHING MILL BLVD AT MEADOW MARSH CRES (N/E CORNER)"], ["K", 6, "ON WHEAT BOOM DR - OPPOSITE 434 WHEAT BOOM DR AT PARK"], ["L", 7, "ON POSTRIDGE DR AT FAIRGATE WAY (N/W CORNER) - TRANSIT STYLE STOP"]];
 var ST_TOPIC = '00-St-Celia-gh45lt-Stc';
-var ST_AM_STOPS = [["1", "Mia"], ["2", "Emma"], ["3", "Natalia"], ["4", "Buttonbush"], ["5", "St. Cecilia"]];
-var ST_PM_STOPS = [["A", "5", "St. Cecilia"], ["B", "4", "Buttonbush"], ["C", "3", "Natalia"], ["D", "2", "Emma"], ["E", "1", "Mia"]];
+var ST_AM_STOPS = [["1", "Mia"], ["2", "Walking"], ["3", "En Route"], ["4", "Emma"], ["5", "Natalia"], ["6", "Threshing Mills"], ["7", "William Rose"], ["8", "Buttonbush"], ["9", "St. Cecilia"]];
+var ST_PM_STOPS = [["A", "9", "St. Cecilia"], ["B", "8", "Buttonbush"], ["C", "7", "William Rose"], ["D", "6", "Threshing Mills"], ["E", "5", "Natalia"], ["F", "4", "Emma"], ["G", "3", "En Route"], ["H", "2", "Walking"], ["I", "1", "Mia"]];
 
 function log(msg, cls) {
   var d = document.createElement('div');
