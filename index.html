@@ -68,12 +68,18 @@
   .devbuslbl { background:rgba(0,0,0,.7); color:#fff; font-size:11px; font-weight:800; padding:1px 7px; border-radius:10px; text-align:center; white-space:nowrap; margin-top:2px; }
   .waitlbl { background:#b45309; color:#fff; font-weight:700; font-size:12px; padding:5px 16px; border-radius:18px; text-align:center; white-space:nowrap; box-shadow:0 2px 6px rgba(0,0,0,.35); }
   .gotofflbl { background:#475569; color:#fff; font-weight:700; font-size:12px; padding:5px 16px; border-radius:18px; text-align:center; white-space:nowrap; box-shadow:0 2px 6px rgba(0,0,0,.35); }
+  .herostrip { padding:10px 12px 4px; background:#0d1712; border-bottom:1px solid #223129; }
+  .hero { border-radius:16px; padding:13px 16px 11px; background:linear-gradient(135deg,#0f5132 0%,#146c43 60%,#198754 100%); box-shadow:0 8px 20px rgba(20,108,67,.4), inset 0 1px 0 rgba(255,255,255,.18); }
+  .herochip { display:inline-block; font-size:10.5px; font-weight:800; letter-spacing:1.8px; color:#0b3520; background:#ffd479; border-radius:999px; padding:3px 9px; margin-bottom:6px; }
+  .herobig { color:#fff; font-size:30px; font-weight:800; line-height:1.05; letter-spacing:-.5px; }
+  .heroasof { color:rgba(255,255,255,.85); font-size:14.5px; font-weight:600; margin-top:4px; }
+  .herocap { color:var(--mut); font-size:.8rem; font-weight:600; margin-top:6px; }
   .phonedot { width:22px; height:22px; border-radius:50%; background:#35d07f; border:3px solid #fff; box-shadow:0 0 0 3px rgba(53,208,127,.4), 0 2px 8px rgba(0,0,0,.5); display:grid; place-items:center; font-size:12px; }
 </style>
 </head>
 <body>
 <header>
-  <h1>&#x1F68C; Bus Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v6.22</span></h1>
+  <h1>&#x1F68C; Bus Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v6.23</span></h1>
   <div class="seg">
     <button id="btnAM" class="on">AM</button>
     <button id="btnPM">PM</button>
@@ -82,6 +88,11 @@
 </header>
 
 <div id="map"></div>
+
+<div class="herostrip" id="heroStrip" style="display:none">
+  <div class="hero"><div class="herochip" id="heroChip"></div><div class="herobig" id="heroBig"></div><div class="heroasof" id="heroAsof"></div></div>
+  <div class="herocap" id="heroCap"></div>
+</div>
 
 <div class="datebar">
   <label for="dateSelect">View:</label>
@@ -145,7 +156,7 @@ var DEVLS_OFF = 'busfollower_dev_off';
 var devStates = {};   /* dev -> { AM: routeState, PM: routeState } */
 var busMarkers = {};  /* dev -> L.marker, used when a subset of devices is shown */
 
-function freshRouteState() { return { reached: {}, skipped: {}, busIdx: -1, complete: false, lastUpdate: null, waiting: null, done: false, offStop: null, delaySec: null }; }
+function freshRouteState() { return { reached: {}, skipped: {}, busIdx: -1, complete: false, lastUpdate: null, waiting: null, done: false, offStop: null, delaySec: null, delayStop: null, delayTime: null }; }
 // v6.22: progress "passed" = true arrivals ∪ look-ahead skips (reached stays arrival-only).
 function passedCount(st) {
   var seen = {};
@@ -386,9 +397,9 @@ function stateFromEvents(r, events) {
     var key = (r === 'AM') ? String(ev.stop) : ev.letter;
     var t = new Date(ev.time);
     if (!st.lastUpdate || t > st.lastUpdate) st.lastUpdate = t;
-    if (ev.kind === 'wait') { if (st.busIdx < 0 && !st.waiting) st.waiting = key; st.delaySec = null; return; }
+    if (ev.kind === 'wait') { if (st.busIdx < 0 && !st.waiting) { st.waiting = key; st.waitLabel = ev.label || ''; } st.delaySec = null; st.delayStop = null; st.delayTime = null; return; }
     if (ev.kind === 'skip') { st.skipped[key] = true; return; }
-    if (ev.kind === 'off') { st.reached[key] = true; st.done = true; st.offStop = key; st.offLabel = ''; st.waiting = null; st.delaySec = null; return; }
+    if (ev.kind === 'off') { st.reached[key] = true; st.done = true; st.offStop = key; st.offLabel = ''; st.waiting = null; st.delaySec = null; st.delayStop = null; st.delayTime = null; return; }
     if (ev.kind === 'onbus') {
       if (st.waiting) {
         st.reached[st.waiting] = true;
@@ -398,13 +409,13 @@ function stateFromEvents(r, events) {
       }
       st.waiting = null;
       st.onBus = { stop: key, disp: ev.disp || key, time: t, label: ev.label };
-      if (!ev.test) { var ndOb = calcOnBusDelay(r, key, t); if (ndOb !== null) st.delaySec = ndOb; }
+      if (!ev.test) { var ndOb = calcOnBusDelay(r, key, t); var hIdx = -1; list.forEach(function (s3, i3) { if (((r === 'AM') ? String(s3.n) : s3.letter) === key) hIdx = i3; }); if (hIdx > 0) { var dep = list[hIdx - 1]; st.delayStop = (r === 'AM') ? String(dep.n) : dep.letter; st.delayTime = t; } if (ndOb !== null) st.delaySec = ndOb; }
       return;
     }
     st.reached[key] = true;
     if (r === 'PM' && !ev.test) {
       st.arrLabel = ev.label || '';
-      var ndS = calcArrivalDelay(r, stopByKey(r, key), t); if (ndS !== null) st.delaySec = ndS;
+      var ndS = calcArrivalDelay(r, stopByKey(r, key), t); st.delayStop = key; st.delayTime = t; if (ndS !== null) st.delaySec = ndS;
     }
     var idx = -1;
     list.forEach(function (s, i) {
@@ -685,59 +696,6 @@ function renderRoute() {
       icon: L.divIcon({ className: '', html: '<div class="gotofflbl">' + esc(agOffText) + '</div>', iconSize: [220, 32], iconAnchor: [110, -18] }),
       zIndexOffset: 1000, interactive: false
     }).addTo(map).bindPopup('<b>' + esc(agOffText) + '</b><br><i>Tracking stopped</i>');
-  } else if (st.waiting && st.busIdx < 0) {
-    var agWait = stopByKey(route, st.waiting);
-    // Find waiting device for the ID (same as status line)
-    var waitDevLbl = '';
-    try {
-      (function(){ try { return knownDevices() || []; } catch(e){ return []; } })().forEach(function (d) {
-        var dds = devDisplayState(route, d);
-        if (dds.waiting && !waitDevLbl) waitDevLbl = devLabel(d);
-      });
-    } catch (e) {}
-    var _wLbl = (st.waitLabel) ? ' (' + st.waitLabel + ')' : '';
-    var waitText = '\uD83D\uDCF1 ' + (waitDevLbl ? '[' + waitDevLbl + ']' + _wLbl + ' ' : '') + 'Waiting for bus at ' + (agWait ? stopShort(agWait) : 'Stop ' + st.waiting);
-    if (agWait) busMarker = L.marker([agWait.lat, agWait.lng], {
-      icon: L.divIcon({ className: '', html: '<div class="waitlbl" style="white-space:normal;line-height:1.3;padding:6px 14px;">' + esc(waitText) + '</div>', iconSize: [240, 52], iconAnchor: [120, -30] }),
-      zIndexOffset: 1000, interactive: false
-    }).addTo(map).bindPopup('<b>' + esc(waitText) + '</b>');
-  } else if (st.onBus && !st.reached[String(st.onBus.stop)]) {
-    var onBusStop = stopByKey(route, String(st.onBus.stop));
-    var onBusDevLbl = '';
-    var onBusDelaySec = null;
-    try {
-      (function(){ try { return knownDevices() || []; } catch(e){ return []; } })().forEach(function (d) {
-        var dds = devDisplayState(route, d);
-        if (dds.onBus && !onBusDevLbl) { onBusDevLbl = devLabel(d); onBusDelaySec = dds.delaySec; }
-      });
-    } catch (e) {}
-    var _obLbl = (st.onBus && st.onBus.label) ? ' (' + st.onBus.label + ')' : '';
-    var onBusText = '\uD83D\uDCF1 ' + (onBusDevLbl ? '[' + onBusDevLbl + ']' + _obLbl + ' ' : '') + 'On bus \u2014 heading to Stop ' + (st.onBus.disp || st.onBus.stop) + onBusPillSuffix(onBusDelaySec, onBusStop);
-    if (onBusStop) busMarker = L.marker([onBusStop.lat, onBusStop.lng], {
-      icon: L.divIcon({ className: '', html: '<div class="waitlbl" style="background:#0b6e4f;white-space:normal;line-height:1.3;padding:6px 14px;">' + esc(onBusText) + '</div>', iconSize: [240, 68], iconAnchor: [120, -30] }),
-      zIndexOffset: 1000, interactive: false
-    }).addTo(map).bindPopup('<b>' + esc(onBusText) + '</b>');
-  } else if (route === 'PM' && st.delaySec !== null && st.delaySec !== undefined && st.busIdx >= 0 && st.busIdx < list.length && !st.complete && !st.done) {
-    var pmStop = list[st.busIdx];
-    var pmNext = (st.busIdx + 1 < list.length) ? list[st.busIdx + 1] : null;
-    var pmDevLbl = '', pmNameLbl = st.arrLabel || '';
-    try {
-      (function(){ try { return knownDevices() || []; } catch(e){ return []; } })().forEach(function (d) {
-        var dds2 = devDisplayState(route, d);
-        if (!pmDevLbl && dds2.busIdx === st.busIdx && dds2.delaySec === st.delaySec) { pmDevLbl = devLabel(d); if (dds2.arrLabel) pmNameLbl = dds2.arrLabel; }
-      });
-    } catch (e) {}
-    var pmNextMin = schedMinOfStop(pmNext);
-    var pmEtaTxt = (pmNext && pmNextMin !== null) ? ' \u00B7 ETA ' + fmtClockSec(pmNextMin * 60 + st.delaySec) : '';
-    var pmWord = fmtDelayWord(st.delaySec);
-    var pmText = '\uD83D\uDCF1 ' + (pmDevLbl ? '[' + pmDevLbl + ']' + (pmNameLbl ? ' (' + pmNameLbl + ')' : '') + ' ' : '') +
-      'At ' + stopShort(pmStop) +
-      (pmNext ? ' \u2014 next ' + stopShort(pmNext) + pmEtaTxt : ' \u2014 final stop') +
-      ' \u00B7 ' + (pmWord === 'on time' ? 'on time' : 'running ' + pmWord);
-    busMarker = L.marker([pmStop.lat, pmStop.lng], {
-      icon: L.divIcon({ className: '', html: '<div class="waitlbl" style="background:#0b6e4f;white-space:normal;line-height:1.3;padding:6px 14px;">' + esc(pmText) + '</div>', iconSize: [240, 68], iconAnchor: [120, -30] }),
-      zIndexOffset: 1000, interactive: false
-    }).addTo(map).bindPopup('<b>' + esc(pmText) + '</b>');
   } else if (st.busIdx >= 0 && st.busIdx < list.length) {
     var b = list[st.busIdx];
     busMarker = L.marker([b.lat, b.lng], {
@@ -750,6 +708,108 @@ function renderRoute() {
     renderRoute._fit = true; renderRoute._r = route;
   }
   renderStatus();
+  try { renderHero(); } catch (e) {}
+}
+
+
+/* ===== Hero banner (v6.23) =====
+   The headline moved off the map into this strip. Renders from the
+   same derived state as everything else (live aggregate, per-device
+   filtered, or history rebuild), so past dates show the same cards.
+   Delay provenance: (delaySec, delayStop, delayTime) — the origin is
+   recorded at every delay assignment; AM readings are born at on-bus
+   events (origin = departed stop) and do not move on arrivals; PM
+   re-measures at every arrival (origin advances). */
+function fmtQuietTime(d) {
+  if (!d) return '';
+  var s = new Date(d).toLocaleTimeString('en-CA', { timeZone: 'America/Toronto', hour: 'numeric', minute: '2-digit', hour12: true });
+  return s.replace(/[\s.]/g, '').toLowerCase();
+}
+function fmtCapTime(d) {
+  if (!d) return '';
+  return new Date(d).toLocaleTimeString('en-CA', { timeZone: 'America/Toronto', hour: 'numeric', minute: '2-digit', second: '2-digit', hour12: true });
+}
+function heroRef(s) { return s ? stopShort(s) : ''; }
+function heroFigure(sec) {
+  var w = fmtDelayWord(sec);
+  return (w === 'on time') ? 'On time' : w;
+}
+function heroState() {
+  if (allDevsSelected()) return { st: getDisplayState(route), dev: '' };
+  var sel = selectedDevices();
+  if (!sel.length) return { st: null, dev: '' };
+  var pool = sel.filter(function (d) { var ds = devDisplayState(route, d); return !ds.done && !ds.complete; });
+  if (!pool.length) pool = sel;
+  var best = null, bestDev = '', bestFrac = -1, bestT = -1;
+  pool.forEach(function (d) {
+    var ds = devDisplayState(route, d);
+    var frac = passedCount(ds), t = ds.lastUpdate ? new Date(ds.lastUpdate).getTime() : 0;
+    if (frac > bestFrac || (frac === bestFrac && t > bestT)) { best = ds; bestDev = d; bestFrac = frac; bestT = t; }
+  });
+  return { st: best || getDisplayState(route), dev: bestDev };
+}
+function renderHero() {
+  var strip = document.getElementById('heroStrip');
+  if (!strip) return;
+  var hs = heroState(), st = hs.st, list = stops();
+  if (!st || !(st.busIdx >= 0 || st.waiting || st.onBus || st.done || st.complete || Object.keys(st.reached || {}).length)) {
+    strip.style.display = 'none'; return;
+  }
+  var chip = '', big = '', asof = '', cap = '';
+  var finalStop = list[list.length - 1], lu = st.lastUpdate;
+  if (st.complete) {
+    if (route === 'AM') {
+      chip = 'AT SCHOOL'; big = 'Route complete';
+      asof = '(arrived ' + heroRef(finalStop) + (lu ? ', ' + fmtQuietTime(lu) : '') + ')';
+    } else {
+      chip = 'ROUTE COMPLETE'; big = 'At ' + heroRef(finalStop); asof = '(final stop)';
+    }
+    cap = 'Last update: ' + fmtCapTime(lu) + ' · route complete';
+  } else if (st.done && st.offStop && (hs.dev || allDevicesDone(route))) {
+    chip = 'GOT OFF'; big = 'At ' + heroRef(stopByKey(route, st.offStop)); asof = '(My Stop · tracking stopped)';
+    cap = 'Last update: ' + fmtCapTime(lu) + ' · tracking stopped';
+  } else if (st.waiting && st.busIdx < 0) {
+    var who = st.waitLabel || '';
+    if (!who) {
+      var wdev = hs.dev || '';
+      if (!wdev) { try { (knownDevices() || []).forEach(function (d) { var dds = devDisplayState(route, d); if (dds.waiting && !wdev) wdev = d; }); } catch (e) {} }
+      who = wdev ? '[' + devLabel(wdev) + ']' : 'The rider';
+    }
+    chip = 'WAITING'; big = who + ' is waiting at ' + heroRef(stopByKey(route, st.waiting));
+    asof = '(My Stop · since ' + fmtQuietTime(lu) + ')';
+    cap = 'Last update: ' + fmtCapTime(lu);
+  } else if (st.onBus && !st.reached[String(st.onBus.stop)]) {
+    var headStop = stopByKey(route, String(st.onBus.stop));
+    chip = 'ON BUS';
+    big = (st.delaySec !== null && st.delaySec !== undefined) ? heroFigure(st.delaySec) : ('Heading to ' + heroRef(headStop));
+    if (st.delayStop) asof = '(as of ' + heroRef(stopByKey(route, st.delayStop)) + (st.delayTime ? ', ' + fmtQuietTime(st.delayTime) : '') + ')';
+    cap = 'Last update: ' + fmtCapTime(st.onBus.time || st.delayTime || lu) + (headStop ? ' · heading to ' + heroRef(headStop) : '');
+  } else if (st.busIdx >= 0 && st.busIdx < list.length) {
+    var cur = list[st.busIdx], next = (st.busIdx + 1 < list.length) ? list[st.busIdx + 1] : null;
+    var figOK = st.delaySec !== null && st.delaySec !== undefined && !(route === 'PM' && st.delayStop === 'S');
+    if (route === 'PM' && cur.letter === 'S') {
+      chip = 'AT SCHOOL'; big = 'At School';
+      var smS = schedMinOfStop(cur);
+      asof = (smS !== null) ? '(departs ' + fmtClockSec(smS * 60) + ')' : '';
+    } else {
+      chip = (route === 'AM') ? ('AT ' + heroRef(cur).toUpperCase()) : 'EN ROUTE';
+      big = figOK ? heroFigure(st.delaySec) : ('At ' + heroRef(cur));
+      if (figOK && st.delayStop) asof = '(as of ' + heroRef(stopByKey(route, st.delayStop)) + (st.delayTime ? ', ' + fmtQuietTime(st.delayTime) : '') + ')';
+    }
+    cap = 'Last update: ' + fmtCapTime(lu);
+    if (next) {
+      cap += ' · heading to ' + heroRef(next);
+      if (route === 'PM' && figOK) { var nm = schedMinOfStop(next); if (nm !== null) cap += ' · ETA ' + fmtClockSec(nm * 60 + st.delaySec); }
+    }
+  } else {
+    strip.style.display = 'none'; return;
+  }
+  document.getElementById('heroChip').textContent = chip;
+  document.getElementById('heroBig').textContent = big;
+  var asofEl = document.getElementById('heroAsof');
+  asofEl.textContent = asof; asofEl.style.display = asof ? '' : 'none';
+  document.getElementById('heroCap').textContent = cap;
+  strip.style.display = '';
 }
 
 function renderStatus() {
@@ -1180,7 +1240,7 @@ function handleMessage(raw, opts) {
         }
         _dsOb.waiting = null; _dsOb.onBus = { stop: _tokOb, disp: _dispOb, time: _evTimeOb, label: _labelOb };
         // Minutes Behind: the ONLY delay calculation (test events excluded)
-        if (!isTest) { var _ndOb = calcOnBusDelay(_rOb, _tokOb, _evTimeOb); if (_ndOb !== null) _dsOb.delaySec = _ndOb; }
+        if (!isTest) { var _ndOb = calcOnBusDelay(_rOb, _tokOb, _evTimeOb); var _hIdx = -1; _listOb.forEach(function (s3, i3) { if (((_rOb === 'AM') ? String(s3.n) : s3.letter) === _tokOb) _hIdx = i3; }); if (_hIdx > 0) { var _dep = _listOb[_hIdx - 1]; _dsOb.delayStop = (_rOb === 'AM') ? String(_dep.n) : _dep.letter; _dsOb.delayTime = _evTimeOb; } if (_ndOb !== null) _dsOb.delaySec = _ndOb; }
       }
       // Clear aggregate waiting too (map banner reads state.<route>.waiting)
       if (typeof state !== 'undefined' && state[_rOb]) {
@@ -1191,7 +1251,7 @@ function handleMessage(raw, opts) {
           if (_awIdx > state[_rOb].busIdx) state[_rOb].busIdx = _awIdx;
         }
         state[_rOb].waiting = null; state[_rOb].onBus = { stop: _tokOb, disp: _dispOb, time: _evTimeOb, label: _labelOb };
-        if (!isTest && _dsOb) state[_rOb].delaySec = _dsOb.delaySec;
+        if (!isTest && _dsOb) { state[_rOb].delaySec = _dsOb.delaySec; state[_rOb].delayStop = _dsOb.delayStop; state[_rOb].delayTime = _dsOb.delayTime; }
       }
     } catch (e) {}
     if (isDevSelected(_devOb)) {
@@ -1296,7 +1356,7 @@ function handleMessage(raw, opts) {
     var dstF = devRouteState(devF, r);
     dstF.complete = true; dstF.busIdx = list.length - 1; dstF.lastUpdate = whenF;
     dstF.reached[keyF] = true;
-    if (r === 'PM' && !isTest) { var ndL = calcArrivalDelay(r, list[list.length - 1], whenF); if (ndL !== null) { dstF.delaySec = ndL; st.delaySec = ndL; } }
+    if (r === 'PM' && !isTest) { var ndL = calcArrivalDelay(r, list[list.length - 1], whenF); dstF.delayStop = keyF; dstF.delayTime = whenF; st.delayStop = keyF; st.delayTime = whenF; if (ndL !== null) { dstF.delaySec = ndL; st.delaySec = ndL; } }
     lastRoute = r;
     if (isDevSelected(devF)) addLog((isTest ? '[TEST] ' : '') + 'Final stop reached (' + r + '). Route complete.' + devIdF + (isTest ? '' : arrivalDelaySuffix(dstF.delaySec, r)),
            (isTest ? 'TEST ' : '') + r, 'test', opts && opts.time);
@@ -1340,7 +1400,7 @@ function applyArrival(r, s, isTest, rawMsg, opts, kind, devArg, lblArg) {
   dst.lastUpdate = evTime;
   if (r === 'PM') {
     dst.arrLabel = lblArg || '';
-    if (!isTest) { st.arrLabel = lblArg || ''; var ndA = calcArrivalDelay(r, s, evTime); if (ndA !== null) { dst.delaySec = ndA; st.delaySec = ndA; } }
+    if (!isTest) { st.arrLabel = lblArg || ''; var ndA = calcArrivalDelay(r, s, evTime); dst.delayStop = key; dst.delayTime = evTime; st.delayStop = key; st.delayTime = evTime; if (ndA !== null) { dst.delaySec = ndA; st.delaySec = ndA; } }
   }
   var label = r === 'AM' ? ('Stop ' + s.n) : ('Stop ' + dispLetterOf(s) + (s.am > 0 ? ' (' + s.am + ')' : ''));
   if (isDevSelected(dev)) {
@@ -1383,7 +1443,7 @@ function applyWaiting(r, s, dev, rawMsg, opts, isTest, label) {
   var evTime = (opts && opts.time) ? new Date(opts.time) : new Date();
   var isOld = !viewDate && !(opts && opts.silent) &&
               torontoDateKey(evTime) !== torontoDateKey(new Date());
-  var added = recordEvent(r, s, isTest, rawMsg, false, opts && opts.time, opts && opts.deferUI, dev, 'wait');
+  var added = recordEvent(r, s, isTest, rawMsg, false, opts && opts.time, opts && opts.deferUI, dev, 'wait', label ? { label: label } : undefined);
   if (viewDate) return added; // history mode: accumulate silently, don't touch the display
   if (opts && opts.silent) return added; // backfill: rendering deferred to the end
   if (isOld) return added; // previous-day event: history only, no live UI update
@@ -1391,9 +1451,9 @@ function applyWaiting(r, s, dev, rawMsg, opts, isTest, label) {
   lastRoute = r;
   var key = (r === 'AM') ? String(s.n) : s.letter;
   var st = state[r];
-  st.waiting = key; st.waitLabel = label || ''; st.lastUpdate = evTime; st.delaySec = null;
+  st.waiting = key; st.waitLabel = label || ''; st.lastUpdate = evTime; st.delaySec = null; st.delayStop = null; st.delayTime = null;
   var dst = devRouteState(dev, r);
-  dst.waiting = key; dst.waitLabel = label || ''; dst.lastUpdate = evTime; dst.delaySec = null;
+  dst.waiting = key; dst.waitLabel = label || ''; dst.lastUpdate = evTime; dst.delaySec = null; dst.delayStop = null; dst.delayTime = null;
   if (isDevSelected(dev)) addLog((isTest ? '[TEST] ' : '') + rawMsg,
          (isTest ? 'TEST ' : '') + r, isTest ? 'test' : r.toLowerCase(), opts && opts.time);
   if (r === route) renderRoute();
@@ -1411,9 +1471,9 @@ function applyGotOff(r, s, dev, rawMsg, opts, isTest, label) {
   lastRoute = r;
   var key = (r === 'AM') ? String(s.n) : s.letter;
   var st = state[r];
-  st.reached[key] = true; st.done = true; st.offStop = key; st.offLabel = label || ''; st.waiting = null; st.lastUpdate = evTime; st.delaySec = null;
+  st.reached[key] = true; st.done = true; st.offStop = key; st.offLabel = label || ''; st.waiting = null; st.lastUpdate = evTime; st.delaySec = null; st.delayStop = null; st.delayTime = null;
   var dst = devRouteState(dev, r);
-  dst.reached[key] = true; dst.done = true; dst.offStop = key; dst.waiting = null; dst.lastUpdate = evTime; dst.delaySec = null;
+  dst.reached[key] = true; dst.done = true; dst.offStop = key; dst.waiting = null; dst.lastUpdate = evTime; dst.delaySec = null; dst.delayStop = null; dst.delayTime = null;
   if (isDevSelected(dev)) addLog((isTest ? '[TEST] ' : '') + rawMsg,
          (isTest ? 'TEST ' : '') + r, isTest ? 'test' : r.toLowerCase(), opts && opts.time);
   if (r === route) renderRoute();
@@ -1436,7 +1496,7 @@ function applyFinalNew(r, dev, rawMsg, opts, isTest, lblF) {
   dst.reached[keyF] = true;
   if (r === 'PM') {
     dst.arrLabel = lblF || '';
-    if (!isTest) { st.arrLabel = lblF || ''; var ndF2 = calcArrivalDelay(r, list[list.length - 1], whenF); if (ndF2 !== null) { dst.delaySec = ndF2; st.delaySec = ndF2; } }
+    if (!isTest) { st.arrLabel = lblF || ''; var ndF2 = calcArrivalDelay(r, list[list.length - 1], whenF); dst.delayStop = keyF; dst.delayTime = whenF; st.delayStop = keyF; st.delayTime = whenF; if (ndF2 !== null) { dst.delaySec = ndF2; st.delaySec = ndF2; } }
   }
   lastRoute = r;
   if (isDevSelected(dev)) addLog((isTest ? '[TEST] ' : '') + rawMsg + (isTest ? '' : arrivalDelaySuffix(dst.delaySec, r)),
