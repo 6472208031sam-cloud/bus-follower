@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Watcher Check</title>
+<style>
+  body { font-family: system-ui, sans-serif; margin: 24px; background: #111; color: #eee; }
+  h1 { font-size: 22px; }
+  .big { font-size: 30px; font-weight: 700; padding: 18px; border-radius: 12px; margin: 16px 0; text-align: center; }
+  .match { background: #14532d; color: #bbf7d0; }
+  .nomatch { background: #3f3f46; color: #d4d4d8; }
+  .row { margin: 10px 0; font-size: 17px; }
+  .k { color: #a1a1aa; }
+  code { word-break: break-all; }
+</style>
+</head>
+<body>
+<h1>Watcher Check</h1>
+<p>Open this page in each browser. The one that says <b>MATCH</b> is the browser sending the W1 heartbeat every minute.</p>
+<div id="verdict" class="big nomatch">Checking…</div>
+<div class="row"><span class="k">This browser:</span> <span id="who"></span></div>
+<div class="row"><span class="k">Device:</span> <span id="dev"></span></div>
+<div class="row"><span class="k">Stored watcher ID:</span> <code id="wid"></code></div>
+<div class="row"><span class="k">Fingerprint:</span> <code id="fp"></code></div>
+<div class="row"><span class="k">Screen:</span> <span id="scr"></span></div>
+<div class="row"><span class="k">Graphics:</span> <span id="gpu"></span></div>
+<script>
+var TARGET_ID = '99f150cf-0319-4111-851d-08f86a80e730';
+var TARGET_FP = 'e5cf4f8c';
+/* fnv + fingerprint copied verbatim from the follower pages (Watching now) */
+function fnv(str) {
+  var h = 0x811c9dc5;
+  for (var i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = (h * 0x01000193) >>> 0; }
+  return ('0000000' + h.toString(16)).slice(-8);
+}
+function fingerprint() {
+  var parts = [];
+  try { parts.push(navigator.userAgent || ''); } catch (e) { parts.push(''); }
+  try { parts.push(screen.width + 'x' + screen.height + 'x' + screen.colorDepth); } catch (e) { parts.push(''); }
+  try { parts.push(Intl.DateTimeFormat().resolvedOptions().timeZone || ''); } catch (e) { parts.push(''); }
+  try { parts.push(navigator.language || ''); } catch (e) { parts.push(''); }
+  try { parts.push(String(navigator.hardwareConcurrency || '')); } catch (e) { parts.push(''); }
+  try { parts.push(String(navigator.maxTouchPoints || 0)); } catch (e) { parts.push(''); }
+  var renderer = '';
+  try {
+    var cv = document.createElement('canvas');
+    var gl = cv.getContext('webgl') || cv.getContext('experimental-webgl');
+    if (gl) {
+      var ext = gl.getExtension('WEBGL_debug_renderer_info');
+      renderer = ext ? String(gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) || '') : String(gl.getParameter(gl.RENDERER) || '');
+    }
+    parts.push(renderer);
+  } catch (e) { parts.push(''); }
+  try {
+    var c2 = document.createElement('canvas'); c2.width = 120; c2.height = 30;
+    var ctx = c2.getContext('2d');
+    ctx.textBaseline = 'top'; ctx.font = '14px Arial';
+    ctx.fillStyle = '#f60'; ctx.fillRect(2, 2, 40, 12);
+    ctx.fillStyle = '#069'; ctx.fillText('watcher', 4, 4);
+    parts.push(fnv(c2.toDataURL()));
+  } catch (e) { parts.push(''); }
+  return { hash: fnv(parts.join('|')), renderer: renderer };
+}
+function browserName(ua) {
+  if (/SamsungBrowser/.test(ua)) return 'Samsung Internet';
+  if (/Edg\//.test(ua)) return 'Microsoft Edge';
+  if (/OPR\/|Opera/.test(ua)) return 'Opera';
+  if (/Firefox\//.test(ua)) return 'Firefox';
+  if (/CriOS/.test(ua)) return 'Chrome (iOS)';
+  if (/FxiOS/.test(ua)) return 'Firefox (iOS)';
+  if (/Chrome\//.test(ua)) return 'Chrome';
+  if (/Safari\//.test(ua)) return 'Safari';
+  return 'Unknown browser';
+}
+function deviceName(ua) {
+  if (/iPhone/.test(ua)) return 'iPhone (Apple)';
+  if (/iPad/.test(ua)) return 'iPad (Apple)';
+  if (/Android/.test(ua)) return 'Android';
+  if (/Windows/.test(ua)) return 'Windows computer';
+  if (/Macintosh/.test(ua)) return 'Mac (Apple)';
+  if (/Linux/.test(ua)) return 'Linux';
+  return 'Unknown';
+}
+var wid = null;
+try { wid = localStorage.getItem('follower_watcher_id'); } catch (e) {}
+var fp = fingerprint();
+document.getElementById('wid').textContent = wid || '(none stored — this browser has not run a follower page)';
+document.getElementById('fp').textContent = fp.hash;
+document.getElementById('who').textContent = browserName(navigator.userAgent);
+document.getElementById('dev').textContent = deviceName(navigator.userAgent);
+document.getElementById('scr').textContent = screen.width + ' x ' + screen.height;
+document.getElementById('gpu').textContent = fp.renderer || '(not available)';
+var v = document.getElementById('verdict');
+if (wid === TARGET_ID) {
+  v.className = 'big match';
+  v.textContent = '✅ MATCH — this browser is the watcher';
+} else if (fp.hash === TARGET_FP) {
+  v.className = 'big match';
+  v.textContent = '🟡 Fingerprint matches, ID differs — same browser/device type, likely the same one';
+} else {
+  v.className = 'big nomatch';
+  v.textContent = 'Not this browser';
+}
+</script>
+</body>
+</html>
