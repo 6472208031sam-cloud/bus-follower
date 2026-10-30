@@ -73,7 +73,7 @@
 </head>
 <body>
 <header>
-  <h1>&#x1F68C; Bus Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v6.21</span></h1>
+  <h1>&#x1F68C; Bus Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v6.22</span></h1>
   <div class="seg">
     <button id="btnAM" class="on">AM</button>
     <button id="btnPM">PM</button>
@@ -145,7 +145,14 @@ var DEVLS_OFF = 'busfollower_dev_off';
 var devStates = {};   /* dev -> { AM: routeState, PM: routeState } */
 var busMarkers = {};  /* dev -> L.marker, used when a subset of devices is shown */
 
-function freshRouteState() { return { reached: {}, busIdx: -1, complete: false, lastUpdate: null, waiting: null, done: false, offStop: null, delaySec: null }; }
+function freshRouteState() { return { reached: {}, skipped: {}, busIdx: -1, complete: false, lastUpdate: null, waiting: null, done: false, offStop: null, delaySec: null }; }
+// v6.22: progress "passed" = true arrivals ∪ look-ahead skips (reached stays arrival-only).
+function passedCount(st) {
+  var seen = {};
+  Object.keys(st.reached || {}).forEach(function (k) { seen[k] = true; });
+  Object.keys(st.skipped || {}).forEach(function (k) { seen[k] = true; });
+  return Object.keys(seen).length;
+}
 function devRouteState(dev, r) {
   if (!devStates[dev]) devStates[dev] = { AM: freshRouteState(), PM: freshRouteState() };
   return devStates[dev][r];
@@ -194,6 +201,7 @@ function mergedSelectedState(r) {
     var ds = devStates[dev] && devStates[dev][r];
     if (!ds) return;
     Object.keys(ds.reached).forEach(function (k) { m.reached[k] = true; });
+    Object.keys(ds.skipped || {}).forEach(function (k) { m.skipped[k] = true; });
     if (ds.busIdx > m.busIdx) m.busIdx = ds.busIdx;
     if (ds.complete) m.complete = true;
     if (ds.done) m.done = true;
@@ -280,7 +288,7 @@ function renderStatusFiltered(list) {
   var best = null, bestDev = null, bestFrac = -1;
   pool.forEach(function (dev) {
     var ds = devDisplayState(route, dev);
-    var done = Object.keys(ds.reached).length;
+    var done = passedCount(ds);
     var frac = list.length ? done / list.length : 0;
     if (frac > bestFrac) { best = ds; bestDev = dev; bestFrac = frac; }
   });
@@ -379,6 +387,7 @@ function stateFromEvents(r, events) {
     var t = new Date(ev.time);
     if (!st.lastUpdate || t > st.lastUpdate) st.lastUpdate = t;
     if (ev.kind === 'wait') { if (st.busIdx < 0 && !st.waiting) st.waiting = key; st.delaySec = null; return; }
+    if (ev.kind === 'skip') { st.skipped[key] = true; return; }
     if (ev.kind === 'off') { st.reached[key] = true; st.done = true; st.offStop = key; st.offLabel = ''; st.waiting = null; st.delaySec = null; return; }
     if (ev.kind === 'onbus') {
       if (st.waiting) {
@@ -612,9 +621,12 @@ function renderRoute() {
   list.forEach(function (s, i) {
     var key = stopKey(s);
     var cls;
+    // v6.22 precedence: arrived-green > next-ring > skipped-grey.
     if (st.reached[key]) cls = 'done';
+    else if (!rideOver && i === st.busIdx + 1) cls = 'next';
+    else if (st.skipped && st.skipped[key]) cls = 'skipped';
     else if (rideOver) cls = 'skipped';
-    else cls = (i === st.busIdx + 1 ? 'next' : '');
+    else cls = '';
     L.marker([s.lat, s.lng], { icon: pinIcon(s, cls) })
       .bindPopup(isWaypoint(s) ? ('<b>Waypoint ' + s.letter + '</b><br>Progress point \u2014 not a stop') : ('<b>' + stopShort(s) + '</b><br>' + esc(s.name)))
       .addTo(pinLayer);
@@ -745,7 +757,7 @@ function renderStatus() {
   if (!allDevsSelected()) { renderStatusFiltered(list); return; }
   var st = getDisplayState(route);
   var line = document.getElementById('statusLine'), sub = document.getElementById('subLine');
-  var done = Object.keys(st.reached).length;
+  var done = passedCount(st);
   document.getElementById('progFill').style.width = (100 * done / list.length) + '%';
   if (st.complete) {
     line.textContent = 'Route complete \u2014 bus reached the final stop';
@@ -760,7 +772,7 @@ function renderStatus() {
         if (!deviceParticipated(route, d)) return;
         var ads = devDisplayState(route, d);
         if (ads.done || ads.complete) return;
-        var adone = Object.keys(ads.reached).length;
+        var adone = passedCount(ads);
         var afrac = list.length ? adone / list.length : 0;
         if (afrac > activeFrac) { activeBest = ads; activeDev = d; activeFrac = afrac; }
       });
@@ -962,7 +974,7 @@ function backfillFromNtfy(topic) {
   var htmlUrl = 'https://ntfy.sh/' + encodeURIComponent(topic);
   function parseHtmlMessages(html) {
     var found = [];
-    var re = /🔔 TEST: 🚌 Stop [^<]{1,200}? reached\.|🚌 Stop [^<]{1,200}? reached\.|🚌 Final stop reached:[^<]{1,200}?\.|📱 \\[[AiW][0-9]{2}\\] [^<]{1,200}?\.|🚌 \\[[AiW][0-9]{2}\\] at [^<]{1,200}?\./g;
+    var re = /🔔 TEST: 🚌 Stop [^<]{1,200}? reached\.|🚌 Stop [^<]{1,200}? reached\.|🚌 Final stop reached:[^<]{1,200}?\.|📱 \\[[AiW][0-9]{2}\\] [^<]{1,200}?\.|🚌 \\[[AiW][0-9]{2}\\] at [^<]{1,200}?\.|⏭ \\[[AiW][0-9]{2}\\] [^<]{1,200}?\./g;
     var m, now = Math.floor(Date.now() / 1000);
     while ((m = re.exec(html)) !== null) {
       var txt = m[0].replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>');
@@ -1186,6 +1198,41 @@ function handleMessage(raw, opts) {
       addLog((isTest ? '[TEST] ' : '') + '\uD83D\uDCF1 [' + _devOb + ']' + (_labelOb ? ' (' + _labelOb + ')' : '') + ' on bus \u2014 heading to Stop ' + _dispOb + '.' +
         (isTest ? '' : onBusDelaySuffix(_dsOb ? _dsOb.delaySec : null, _sOb)),
         (isTest ? 'TEST ' : '') + _rOb, isTest ? 'test' : _rOb.toLowerCase(), opts && opts.time);
+    }
+    try { renderRoute(); renderStatus(); } catch (e) {}
+    return true;
+  }
+  // v6.22: look-ahead skip notice. Marks the stop skipped for
+  // that device (grey pin; progress counts it as passed); it is
+  // NOT an arrival and does not move the bus position.
+  var mSkip = msg.match(new RegExp('^\u23ED \\[([AiW][0-9]{2})\\](?: \\(([^)]+)\\))? skipped Stop (0[12]|[A-Z0-9]+)(?: \\((\\d+)\\))?[:.]'));
+  if (mSkip) {
+    var _devSk = mSkip[1];
+    var _labelSk = mSkip[2] || '';
+    var _tokSk = mSkip[3];
+    // Route rule matches the on-bus block: PM tokens are S, 0, 01, 02, A-L; AM are plain numbers
+    var _rSk = (/^(0|01|02)$/.test(_tokSk) || !/^\d+$/.test(_tokSk)) ? 'PM' : 'AM';
+    var _listSk = (_rSk === 'AM') ? AM_STOPS : PM_STOPS;
+    var _keyFnSk = function (s) { return (_rSk === 'AM') ? String(s.n) : s.letter; };
+    var _sSk = null;
+    _listSk.forEach(function (x) { if (_keyFnSk(x) === _tokSk) _sSk = x; });
+    var _evTimeSk = (opts && opts.time) ? new Date(opts.time) : new Date();
+    registerDevice(_devSk);
+    // Record kind 'skip' so reloads, backfill and the date picker
+    // derive the same grey pins as the live session.
+    var _addedSk = _sSk ? recordEvent(_rSk, _sSk, isTest, raw, false, opts && opts.time, opts && opts.deferUI, _devSk, 'skip', { label: _labelSk }) : false;
+    if (viewDate) return _addedSk; // history mode: accumulate silently
+    if (opts && opts.silent) return _addedSk; // backfill: rendering deferred to the end
+    if (torontoDateKey(_evTimeSk) !== torontoDateKey(new Date())) return _addedSk; // previous-day: history only
+    if (_rSk !== route) setRoute(_rSk); // route auto-follow (v6.21 parity)
+    try {
+      var _keySk = _sSk ? _keyFnSk(_sSk) : null;
+      var _dsSk = devRouteState(_devSk, _rSk);
+      if (_dsSk && _keySk) { _dsSk.skipped[_keySk] = true; _dsSk.lastUpdate = _evTimeSk; }
+      if (typeof state !== 'undefined' && state[_rSk] && _keySk) state[_rSk].skipped[_keySk] = true;
+    } catch (e) {}
+    if (isDevSelected(_devSk)) {
+      addLog((isTest ? '[TEST] ' : '') + msg, (isTest ? 'TEST ' : '') + _rSk, isTest ? 'test' : _rSk.toLowerCase(), opts && opts.time);
     }
     try { renderRoute(); renderStatus(); } catch (e) {}
     return true;
@@ -1455,7 +1502,7 @@ function logEntryFromEvent(r, ev) {
   if (ev.kind === 'onbus') {
     txt = (ev.test ? '[TEST] ' : '') + '\uD83D\uDCF1 [' + (ev.dev || '?') + ']' + (ev.label ? ' (' + ev.label + ')' : '') + ' on bus \u2014 heading to Stop ' +
       (ev.disp || ((r === 'AM') ? String(ev.stop) : (ev.letter + (ev.stop ? ' (' + ev.stop + ')' : '')))) + '.';
-  } else if (ev.kind === 'wait' || ev.kind === 'off' || ev.kind === 'newbus' || ev.kind === 'newarr' || ev.kind === 'newfinal') {
+  } else if (ev.kind === 'wait' || ev.kind === 'off' || ev.kind === 'skip' || ev.kind === 'newbus' || ev.kind === 'newarr' || ev.kind === 'newfinal') {
     txt = (ev.test ? '[TEST] ' : '') + ev.msg; // verbatim: preserves icon + device ID
   } else {
     txt = (ev.test ? '[TEST] ' : '') + (ev.final ? 'Final stop reached' : ('Bus reached ' + label)) + devTag;
