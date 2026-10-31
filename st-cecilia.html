@@ -77,7 +77,7 @@
 </head>
 <body>
 <header>
-  <h1>&#x1F68C; St Cecilia Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v5.29</span></h1>
+  <h1>&#x1F68C; St Cecilia Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v5.30</span></h1>
   <div class="seg">
     <button id="btnAM" class="on">AM</button>
     <button id="btnPM">PM</button>
@@ -977,7 +977,7 @@ if (HARDCODED_TOPIC) {
 }
 // Re-backfill when tab becomes visible again (mobile browsers suspend SSE in background tabs)
 
-/* ===== Live Tracker (v5.29) =====
+/* ===== Live Tracker (v5.30) =====
    Position layer: subscribes to the Firebase Realtime Database
    position records (REST/SSE, SDK-free) and glides the bus marker
    along the route line between stop events. SEPARATE from the event
@@ -1108,6 +1108,15 @@ function posDriveMarker(key, marker, rec, color, dev) {
   cur.lat = nl; cur.lng = ng;
 }
 
+function posRouteOk(rec) {
+  // Records written before the writer fix carry the app name
+  // ('stcecilia') instead of a tab — they hold no tab, so accept
+  // them on either tab; tab-carrying records must match exactly.
+  // (Participation still scopes production to the right route.)
+  var rr = String(rec.route || '').toUpperCase();
+  if (rr === 'AM' || rr === 'PM') return rr === route;
+  return true;
+}
 function posTick() {
   if (viewDate) return; // history view stays position-free
   try {
@@ -1120,7 +1129,7 @@ function posTick() {
         Object.keys(posByTag).forEach(function (t) {
           var rec = posByTag[t];
           if (!rec || !rec.active || typeof rec.lat !== 'number') return;
-          if (String(rec.route || '').toUpperCase() !== route) return;
+          if (!posRouteOk(rec)) return;
           if (!tBestRec || (rec.ts || 0) > (tBestRec.ts || 0)) { tBestRec = rec; tBestTag = t; }
         });
         if (!tBestRec) { posForget('__agg'); return; }
@@ -1141,7 +1150,7 @@ function posTick() {
         devs.forEach(function (d) {
           var rec = posByTag[d];
           if (!rec || !rec.active || typeof rec.lat !== 'number') return;
-          if (String(rec.route || '').toUpperCase() !== route) return;
+          if (!posRouteOk(rec)) return;
           try { if (!deviceParticipated(route, d)) return; } catch (e) { return; }
           if (!bestRec || (rec.ts || 0) > (bestRec.ts || 0)) { bestRec = rec; bestTag = d; }
         });
@@ -1157,7 +1166,7 @@ function posTick() {
         var rec = posByTag[dev];
         if (!rec || !rec.active || typeof rec.lat !== 'number'
             || !(ds.busIdx >= 0 && !ds.complete && !ds.done)
-            || String(rec.route || '').toUpperCase() !== route) { posForget(dev); return; }
+            || !posRouteOk(rec)) { posForget(dev); return; }
         posDriveMarker(dev, m, rec, devColor(dev), dev);
       });
     }
