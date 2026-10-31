@@ -77,7 +77,7 @@
 </head>
 <body>
 <header>
-  <h1>&#x1F68C; St Cecilia Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v5.28</span></h1>
+  <h1>&#x1F68C; St Cecilia Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v5.29</span></h1>
   <div class="seg">
     <button id="btnAM" class="on">AM</button>
     <button id="btnPM">PM</button>
@@ -977,7 +977,7 @@ if (HARDCODED_TOPIC) {
 }
 // Re-backfill when tab becomes visible again (mobile browsers suspend SSE in background tabs)
 
-/* ===== Live Tracker (v5.28) =====
+/* ===== Live Tracker (v5.29) =====
    Position layer: subscribes to the Firebase Realtime Database
    position records (REST/SSE, SDK-free) and glides the bus marker
    along the route line between stop events. SEPARATE from the event
@@ -988,7 +988,7 @@ if (HARDCODED_TOPIC) {
    event-driven placement; past ~90 s without a fresh fix it greys
    and the status line shows "last seen". History view: no dot. */
 var FB_BASE = 'https://bus-live-tracker-db0e1-default-rtdb.firebaseio.com';
-var FB_PATH = 'pos-4688de3309369eb335b245d1';
+var FB_PATH = 'pos-4688de3309369eb335b245d1/stc';
 var POS_STALE_MS = 90000;
 var POS_ROUTE_MAX_M = 100;  // production: positions farther than this from the route are ignored (Domi's strict pick, 2026-10-31)
 var posLastDist = 0;        // distance (m) of the most recent posProject call
