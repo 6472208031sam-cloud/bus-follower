@@ -79,7 +79,7 @@
 </head>
 <body>
 <header>
-  <h1>&#x1F68C; Bus Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v6.28</span></h1>
+  <h1>&#x1F68C; Bus Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v6.29</span></h1>
   <div class="seg">
     <button id="btnAM" class="on">AM</button>
     <button id="btnPM">PM</button>
@@ -123,7 +123,7 @@
   <h2>Devices</h2>
   <div class="devfilter" id="devFilter">
     <label class="devrow"><input type="checkbox" id="devAllToggle" checked /> <b>All devices</b></label>
-    <label class="devrow"><input type="checkbox" id="posTestToggle" /> <b>Position test</b> — show the live dot from positions alone (testing only; turns off when the page reloads)</label>
+    <label class="devrow"><input type="checkbox" id="posTestToggle" checked /> <b>Position test</b> — raw live dot from positions alone (testing only; on by default for now)</label>
     <div id="devList"></div>
   </div>
 
@@ -1002,7 +1002,7 @@ if (HARDCODED_TOPIC) {
 }
 // Re-backfill when tab becomes visible again (mobile browsers suspend SSE in background tabs)
 
-/* ===== Live Tracker (v6.28) =====
+/* ===== Live Tracker (v6.29) =====
    Position layer: subscribes to the Firebase Realtime Database
    position records (REST/SSE, SDK-free) and glides the bus marker
    along the route line between stop events. SEPARATE from the event
@@ -1015,11 +1015,13 @@ if (HARDCODED_TOPIC) {
 var FB_BASE = 'https://bus-live-tracker-db0e1-default-rtdb.firebaseio.com';
 var FB_PATH = 'pos-4688de3309369eb335b245d1';
 var POS_STALE_MS = 90000;
+var POS_ROUTE_MAX_M = 100;  // production: positions farther than this from the route are ignored (Domi's strict pick, 2026-10-31)
+var posLastDist = 0;        // distance (m) of the most recent posProject call
 var posByTag = {};     // tag -> latest record {lat,lng,acc,ts,route,active,label}
 var posAnim = {};      // marker key -> {lat, lng, marker} animated position
 var posMode = {};      // marker key -> 'live' | 'stale' (absent = event-driven)
 var posDriverTag = ''; // aggregate mode: tag whose position drives the dot
-var posTest = false;   // Position test toggle (memory-only; reload resets)
+var posTest = true;    // Position test toggle — ON by default at Domi's direction (2026-10-31, 'for now'); memory-only, never stored
 var posSrc = null;
 
 function posProject(lat, lng, pts) {
@@ -1037,6 +1039,7 @@ function posProject(lat, lng, pts) {
     var d = (bx - px) * (bx - px) + (by - py) * (by - py);
     if (d < bestD) { bestD = d; best = [py / ky, px / kx]; }
   }
+  posLastDist = Math.sqrt(bestD);
   return best;
 }
 
@@ -1053,6 +1056,7 @@ function posDotIcon(color, stale, dev) {
 function posStaleNoteFor(tag) {
   var rec = tag ? posByTag[tag] : null;
   if (!rec || !rec.active || typeof rec.lat !== 'number') return '';
+  if (!posTest) { posProject(rec.lat, rec.lng, path()); if (posLastDist > POS_ROUTE_MAX_M) return ''; } // off-route: ignored in production
   if (Date.now() - (rec.ts || 0) <= POS_STALE_MS) return '';
   return ' \u00B7 \uD83D\uDCCD last seen ' + new Date(rec.ts).toLocaleTimeString();
 }
@@ -1062,6 +1066,26 @@ function posForget(key) { delete posMode[key]; delete posAnim[key]; }
 
 function posDriveMarker(key, marker, rec, color, dev) {
   if (!marker) return;
+  var raw = posTest && key === '__agg';
+  var target;
+  if (raw) {
+    target = [rec.lat, rec.lng];
+  } else {
+    target = posProject(rec.lat, rec.lng, path());
+    if (!target) return;
+    if (posLastDist > POS_ROUTE_MAX_M) {
+      // Production only: a phone far off the route is not the bus —
+      // ignore its position entirely. (Test mode shows everything.)
+      if (posMode[key] !== 'offroute') {
+        posForget(key);
+        if (key === '__agg') { posDriverTag = ''; try { renderRoute(); } catch (e) {} }
+        else { try { map.removeLayer(marker); } catch (e) {} }
+        posMode[key] = 'offroute';
+      }
+      return;
+    }
+    if (posMode[key] === 'offroute') posMode[key] = '';
+  }
   var age = Date.now() - (rec.ts || 0);
   if (age > POS_STALE_MS) {
     if (posMode[key] !== 'stale') {
@@ -1071,9 +1095,6 @@ function posDriveMarker(key, marker, rec, color, dev) {
     }
     return; // dot stays at its last live spot, greyed
   }
-  var raw = posTest && key === '__agg';
-  var target = raw ? [rec.lat, rec.lng] : posProject(rec.lat, rec.lng, path());
-  if (!target) return;
   if (posMode[key] !== 'live') {
     posMode[key] = 'live';
     try { marker.setIcon(posDotIcon(color, false, dev)); } catch (e) {}
