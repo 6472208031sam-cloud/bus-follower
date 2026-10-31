@@ -77,7 +77,7 @@
 </head>
 <body>
 <header>
-  <h1>&#x1F68C; St Cecilia Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v5.25</span></h1>
+  <h1>&#x1F68C; St Cecilia Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v5.26</span></h1>
   <div class="seg">
     <button id="btnAM" class="on">AM</button>
     <button id="btnPM">PM</button>
@@ -977,7 +977,7 @@ if (HARDCODED_TOPIC) {
 }
 // Re-backfill when tab becomes visible again (mobile browsers suspend SSE in background tabs)
 
-/* ===== Live Tracker (v5.25) =====
+/* ===== Live Tracker (v5.26) =====
    Position layer: subscribes to the Firebase Realtime Database
    position records (REST/SSE, SDK-free) and glides the bus marker
    along the route line between stop events. SEPARATE from the event
@@ -1046,12 +1046,33 @@ function posDriveMarker(key, marker, rec, color, dev) {
     }
     return; // dot stays at its last live spot, greyed
   }
-  var target = posProject(rec.lat, rec.lng, path());
+  var raw = posTest && key === '__agg';
+  var target = raw ? [rec.lat, rec.lng] : posProject(rec.lat, rec.lng, path());
   if (!target) return;
   if (posMode[key] !== 'live') {
     posMode[key] = 'live';
     try { marker.setIcon(posDotIcon(color, false, dev)); } catch (e) {}
     try { renderStatus(); } catch (e) {}
+  }
+  if (raw) {
+    // Position test: true coordinates — no projection, no glide —
+    // and the popup carries the raw readout. renderRoute rebinds
+    // the event popup when the toggle turns off.
+    var pa = posAnim[key];
+    if (!pa || pa.marker !== marker) { pa = { lat: target[0], lng: target[1], marker: marker, popupTs: 0 }; posAnim[key] = pa; }
+    pa.lat = target[0]; pa.lng = target[1];
+    try { marker.setLatLng(target); } catch (e) {}
+    if (pa.popupTs !== rec.ts) {
+      pa.popupTs = rec.ts;
+      var html = '<b>Live GPS</b><br>' + rec.lat.toFixed(6) + ', ' + rec.lng.toFixed(6)
+        + '<br>acc ' + (typeof rec.acc === 'number' ? Math.round(rec.acc) + ' m' : '\u2014')
+        + ' \u00B7 ' + new Date(rec.ts).toLocaleTimeString();
+      try {
+        if (marker.getPopup && marker.getPopup()) marker.setPopupContent(html);
+        else marker.bindPopup(html);
+      } catch (e) {}
+    }
+    return;
   }
   var cur = posAnim[key];
   if (!cur || cur.marker !== marker) {
