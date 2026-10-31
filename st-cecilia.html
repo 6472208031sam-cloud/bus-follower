@@ -77,7 +77,7 @@
 </head>
 <body>
 <header>
-  <h1>&#x1F68C; St Cecilia Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v5.30</span></h1>
+  <h1>&#x1F68C; St Cecilia Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v5.31</span></h1>
   <div class="seg">
     <button id="btnAM" class="on">AM</button>
     <button id="btnPM">PM</button>
@@ -122,15 +122,20 @@
   <h2>Devices</h2>
   <div class="devfilter" id="devFilter">
     <label class="devrow"><input type="checkbox" id="devAllToggle" checked /> <b>All devices</b></label>
-    <label class="devrow"><input type="checkbox" id="posTestToggle" checked /> <b>Position test</b> — raw live dot from positions alone (testing only; on by default for now)</label>
     <div id="devList"></div>
+  </div>
+
+  <h2>Maintenance</h2>
+  <div class="devfilter">
+    <label class="devrow"><input type="checkbox" id="heartbeatToggle" checked /> <b>Heartbeat</b> — this page counts itself as watching (shown on the test-alerts page)</label>
+    <label class="devrow"><input type="checkbox" id="posTestToggle" checked /> <b>Position test</b> — raw live dot from positions alone (testing only; on by default for now)</label>
+    <div class="row"><a class="act ghost" href="test-alerts.html" target="_blank" style="text-decoration:none;display:inline-block;text-align:center;">🔔 Test stop alerts</a></div>
   </div>
 
   <h2>Event log</h2>
   <div class="row">
     <button class="act ghost" id="clearLog">Clear log</button>
     <button class="act ghost" id="clearHistory">Clear all history</button>
-    <a class="act ghost" href="test-alerts.html" target="_blank" style="text-decoration:none;display:inline-block;text-align:center;">🔔 Test stop alerts</a>
   </div>
   <div id="log"><div id="logEmpty">No events yet. Arrivals posted to the channel will appear here.</div></div>
 </section>
@@ -977,7 +982,7 @@ if (HARDCODED_TOPIC) {
 }
 // Re-backfill when tab becomes visible again (mobile browsers suspend SSE in background tabs)
 
-/* ===== Live Tracker (v5.30) =====
+/* ===== Live Tracker (v5.31) =====
    Position layer: subscribes to the Firebase Realtime Database
    position records (REST/SSE, SDK-free) and glides the bus marker
    along the route line between stop events. SEPARATE from the event
@@ -1240,6 +1245,9 @@ if (posTestEl) posTestEl.addEventListener('change', function () {
 (function () {
   try {
     var PRES_TOPIC = HARDCODED_TOPIC + '-presence';
+    var HB_KEY = 'follower_heartbeat_on_stc'; // Heartbeat toggle (Maintenance section): persisted per page — the two followers share one origin, so each page needs its own key
+    var heartbeatOn = true;
+    try { heartbeatOn = localStorage.getItem(HB_KEY) !== '0'; } catch (e) {}
     var wid = null;
     try {
       wid = localStorage.getItem('follower_watcher_id');
@@ -1287,10 +1295,20 @@ if (posTestEl) posTestEl.addEventListener('change', function () {
     var FP = fingerprint();
     function ping() {
       if (document.hidden) return;
+      if (!heartbeatOn) return;
       try {
         fetch('https://ntfy.sh/' + encodeURIComponent(PRES_TOPIC), { method: 'POST', body: 'W1|' + wid + '|' + FP })
           .then(function () {}, function () {});
       } catch (e) {}
+    }
+    var hbEl = document.getElementById('heartbeatToggle');
+    if (hbEl) {
+      hbEl.checked = heartbeatOn;
+      hbEl.addEventListener('change', function () {
+        heartbeatOn = !!hbEl.checked;
+        try { localStorage.setItem(HB_KEY, heartbeatOn ? '1' : '0'); } catch (e) {}
+        if (heartbeatOn) ping();
+      });
     }
     ping();
     setInterval(ping, 60000);
