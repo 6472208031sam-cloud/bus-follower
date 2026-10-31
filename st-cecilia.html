@@ -77,7 +77,7 @@
 </head>
 <body>
 <header>
-  <h1>&#x1F68C; St Cecilia Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v5.24</span></h1>
+  <h1>&#x1F68C; St Cecilia Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v5.25</span></h1>
   <div class="seg">
     <button id="btnAM" class="on">AM</button>
     <button id="btnPM">PM</button>
@@ -122,6 +122,7 @@
   <h2>Devices</h2>
   <div class="devfilter" id="devFilter">
     <label class="devrow"><input type="checkbox" id="devAllToggle" checked /> <b>All devices</b></label>
+    <label class="devrow"><input type="checkbox" id="posTestToggle" /> <b>Position test</b> — show the live dot from positions alone (testing only; turns off when the page reloads)</label>
     <div id="devList"></div>
   </div>
 
@@ -976,7 +977,7 @@ if (HARDCODED_TOPIC) {
 }
 // Re-backfill when tab becomes visible again (mobile browsers suspend SSE in background tabs)
 
-/* ===== Live Tracker (v5.24) =====
+/* ===== Live Tracker (v5.25) =====
    Position layer: subscribes to the Firebase Realtime Database
    position records (REST/SSE, SDK-free) and glides the bus marker
    along the route line between stop events. SEPARATE from the event
@@ -993,6 +994,7 @@ var posByTag = {};     // tag -> latest record {lat,lng,acc,ts,route,active,labe
 var posAnim = {};      // marker key -> {lat, lng, marker} animated position
 var posMode = {};      // marker key -> 'live' | 'stale' (absent = event-driven)
 var posDriverTag = ''; // aggregate mode: tag whose position drives the dot
+var posTest = false;   // Position test toggle (memory-only; reload resets)
 var posSrc = null;
 
 function posProject(lat, lng, pts) {
@@ -1068,21 +1070,37 @@ function posTick() {
   if (viewDate) return; // history view stays position-free
   try {
     if (allDevsSelected()) {
-      var st = displayStateFor(route);
-      if (!(st.busIdx >= 0 && !st.complete && !st.done)) { posForget('__agg'); return; }
-      var devs = [];
-      try { devs = knownDevices() || []; } catch (e) {}
-      var bestTag = '', bestRec = null;
-      devs.forEach(function (d) {
-        var rec = posByTag[d];
-        if (!rec || !rec.active || typeof rec.lat !== 'number') return;
-        if (String(rec.route || '').toUpperCase() !== route) return;
-        try { if (!deviceParticipated(route, d)) return; } catch (e) { return; }
-        if (!bestRec || (rec.ts || 0) > (bestRec.ts || 0)) { bestRec = rec; bestTag = d; }
-      });
-      if (!bestRec) { posForget('__agg'); return; }
-      posDriverTag = bestTag;
-      posDriveMarker('__agg', busMarker, bestRec, null, null);
+      if (posTest) {
+        // Position test mode (toggle, memory-only): draw the dot
+        // from the position feed alone — no event gate, no
+        // participation requirement. Route match still applies.
+        var tBestTag = '', tBestRec = null;
+        Object.keys(posByTag).forEach(function (t) {
+          var rec = posByTag[t];
+          if (!rec || !rec.active || typeof rec.lat !== 'number') return;
+          if (String(rec.route || '').toUpperCase() !== route) return;
+          if (!tBestRec || (rec.ts || 0) > (tBestRec.ts || 0)) { tBestRec = rec; tBestTag = t; }
+        });
+        if (!tBestRec) { posForget('__agg'); return; }
+        posDriverTag = tBestTag;
+        posDriveMarker('__agg', busMarker, tBestRec, null, null);
+      } else {
+        var st = displayStateFor(route);
+        if (!(st.busIdx >= 0 && !st.complete && !st.done)) { posForget('__agg'); return; }
+        var devs = [];
+        try { devs = knownDevices() || []; } catch (e) {}
+        var bestTag = '', bestRec = null;
+        devs.forEach(function (d) {
+          var rec = posByTag[d];
+          if (!rec || !rec.active || typeof rec.lat !== 'number') return;
+          if (String(rec.route || '').toUpperCase() !== route) return;
+          try { if (!deviceParticipated(route, d)) return; } catch (e) { return; }
+          if (!bestRec || (rec.ts || 0) > (bestRec.ts || 0)) { bestRec = rec; bestTag = d; }
+        });
+        if (!bestRec) { posForget('__agg'); return; }
+        posDriverTag = bestTag;
+        posDriveMarker('__agg', busMarker, bestRec, null, null);
+      }
     } else {
       selectedDevices().forEach(function (dev) {
         var m = busMarkers[dev];
@@ -1146,6 +1164,15 @@ function posSubscribe() {
 }
 posSubscribe();
 setInterval(posTick, 250);
+var posTestEl = document.getElementById('posTestToggle');
+if (posTestEl) posTestEl.addEventListener('change', function () {
+  posTest = !!posTestEl.checked;
+  if (!posTest) {
+    // Restore the event-driven marker immediately.
+    posForget('__agg'); posDriverTag = '';
+    try { renderRoute(); } catch (e) {}
+  }
+});
 
 /* ===== Presence heartbeat =====
    Publish-only: this page pings a derived "-presence" topic every
