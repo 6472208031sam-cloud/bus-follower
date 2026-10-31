@@ -23,7 +23,7 @@
 </style>
 </head>
 <body>
-<h1>ntfy Alert Test <span style="font-size:0.6em;opacity:0.7;font-weight:normal;">v2.14</span></h1>
+<h1>ntfy Alert Test <span style="font-size:0.6em;opacity:0.7;font-weight:normal;">v2.15</span></h1>
 <p style="font-size:0.9rem;opacity:0.85;">Channel: <code id="chanName" style="background:#222;padding:0.15rem 0.5rem;border-radius:4px;user-select:all;"></code></p>
 <p>Sends <strong>TEST</strong> alerts to the channel saved in the Bus Follower page.</p>
 
@@ -37,11 +37,11 @@
 <h2>Connectivity Test</h2>
 <p>Tap to verify your phone can reach ntfy.sh:</p>
 <div class="row">
-  <button onclick="window.open('https://ntfy.sh/' + TOPIC + '/json?poll=1&since=24h', '_blank')">Test History API</button>
-  <button onclick="window.open('https://ntfy.sh/' + ST_TOPIC + '/json?poll=1&since=24h', '_blank')">Test History API — St Cecilia</button>
+  <button onclick="window.open('https://ntfy.sh/' + TOPIC, '_blank')">History — ntfy app</button>
+  <button onclick="window.open('https://ntfy.sh/' + ST_TOPIC, '_blank')">History — ntfy app — St Cecilia</button>
   <button onclick="window.open('https://ntfy.sh/' + TOPIC + '/sse', '_blank')">Test Live Stream</button>
 </div>
-<p style="font-size:0.85rem;opacity:0.8;">History should show JSON (or empty). Live stream will hang waiting — that's normal if it connects. If either fails, your network is blocking ntfy.sh.</p>
+<p style="font-size:0.85rem;opacity:0.8;">History opens the channel in the ntfy web app. Live stream will hang waiting — that's normal if it connects. If either fails, your network is blocking ntfy.sh.</p>
 
 <h2>Clear channel</h2>
 <div class="row">
