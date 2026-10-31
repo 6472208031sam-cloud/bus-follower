@@ -77,7 +77,7 @@
 </head>
 <body>
 <header>
-  <h1>&#x1F68C; St Cecilia Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v5.27</span></h1>
+  <h1>&#x1F68C; St Cecilia Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v5.28</span></h1>
   <div class="seg">
     <button id="btnAM" class="on">AM</button>
     <button id="btnPM">PM</button>
@@ -977,7 +977,7 @@ if (HARDCODED_TOPIC) {
 }
 // Re-backfill when tab becomes visible again (mobile browsers suspend SSE in background tabs)
 
-/* ===== Live Tracker (v5.27) =====
+/* ===== Live Tracker (v5.28) =====
    Position layer: subscribes to the Firebase Realtime Database
    position records (REST/SSE, SDK-free) and glides the bus marker
    along the route line between stop events. SEPARATE from the event
@@ -1125,6 +1125,12 @@ function posTick() {
         });
         if (!tBestRec) { posForget('__agg'); return; }
         posDriverTag = tBestTag;
+        if (!busMarker) {
+          // Test mode must work with NO events at all (couch tests —
+          // e.g. the PM tab after midnight has no event state, so
+          // renderRoute never created the shared marker): create it.
+          try { busMarker = L.marker([tBestRec.lat, tBestRec.lng], { icon: posDotIcon(null, false, null) }).addTo(map); } catch (e) {}
+        }
         posDriveMarker('__agg', busMarker, tBestRec, null, null);
       } else {
         var st = displayStateFor(route);
