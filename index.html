@@ -79,7 +79,7 @@
 </head>
 <body>
 <header>
-  <h1>&#x1F68C; Bus Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v6.32</span></h1>
+  <h1>&#x1F68C; Bus Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v6.33</span></h1>
   <div class="seg">
     <button id="btnAM" class="on">AM</button>
     <button id="btnPM">PM</button>
@@ -722,10 +722,29 @@ function renderRoute() {
     }).addTo(map).bindPopup('<b>' + esc(waitText) + '</b>');
   } else if (st.busIdx >= 0 && st.busIdx < list.length) {
     var b = list[st.busIdx];
-    busMarker = L.marker([b.lat, b.lng], {
-      icon: L.divIcon({ className: '', html: '<div class="busdot"></div>', iconSize: [22, 22], iconAnchor: [11, 11] }),
-      zIndexOffset: 1000
-    }).addTo(map).bindPopup('<b>Bus here</b><br>' + esc(stopShort(b)));
+    if (st.onBus) {
+      // On-bus pill (restored 2026-11-01 at Domi's direction, short
+      // form, no delay tail): "(Label) On bus headed to -> Stop N",
+      // or "[tag]" when the phone has no label.
+      var obDevLbl = '';
+      try {
+        (knownDevices() || []).forEach(function (d) {
+          var dds = devDisplayState(route, d);
+          if (dds.onBus && !obDevLbl) obDevLbl = devLabel(d);
+        });
+      } catch (e) {}
+      var onBusText = (st.onBus.label ? '(' + st.onBus.label + ') ' : (obDevLbl ? '[' + obDevLbl + '] ' : ''))
+        + 'On bus headed to \u2192 Stop ' + (st.onBus.disp || st.onBus.stop);
+      busMarker = L.marker([b.lat, b.lng], {
+        icon: L.divIcon({ className: '', html: '<div class="waitlbl" style="background:#0b6e4f;white-space:normal;line-height:1.3;padding:6px 14px;">' + esc(onBusText) + '</div>', iconSize: [240, 52], iconAnchor: [120, -30] }),
+        zIndexOffset: 1000
+      }).addTo(map).bindPopup('<b>' + esc(onBusText) + '</b>');
+    } else {
+      busMarker = L.marker([b.lat, b.lng], {
+        icon: L.divIcon({ className: '', html: '<div class="busdot"></div>', iconSize: [22, 22], iconAnchor: [11, 11] }),
+        zIndexOffset: 1000
+      }).addTo(map).bindPopup('<b>Bus here</b><br>' + esc(stopShort(b)));
+    }
   }
   if (!renderRoute._fit || renderRoute._r !== route) {
     map.fitBounds(routeLine.getBounds(), { padding: [24, 24] });
@@ -1007,7 +1026,7 @@ if (HARDCODED_TOPIC) {
 }
 // Re-backfill when tab becomes visible again (mobile browsers suspend SSE in background tabs)
 
-/* ===== Live Tracker (v6.32) =====
+/* ===== Live Tracker (v6.33) =====
    Position layer: subscribes to the Firebase Realtime Database
    position records (REST/SSE, SDK-free) and glides the bus marker
    along the route line between stop events. SEPARATE from the event
