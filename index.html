@@ -79,7 +79,7 @@
 </head>
 <body>
 <header>
-  <h1>&#x1F68C; Bus Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v6.33</span></h1>
+  <h1>&#x1F68C; Bus Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v6.34</span></h1>
   <div class="seg">
     <button id="btnAM" class="on">AM</button>
     <button id="btnPM">PM</button>
@@ -130,6 +130,7 @@
   <div class="devfilter">
     <label class="devrow"><input type="checkbox" id="heartbeatToggle" checked /> <b>Heartbeat</b> — this page counts itself as watching (shown on the test-alerts page)</label>
     <label class="devrow"><input type="checkbox" id="posTestToggle" checked /> <b>Position test</b> — raw live dot from positions alone (testing only; on by default for now)</label>
+    <label class="devrow"><input type="checkbox" id="showTestsToggle" /> <b>Show test alerts</b> — 🔔 TEST events apply and appear in the log (off = recorded but hidden, no effect)</label>
     <div class="row"><a class="act ghost" href="test-alerts.html" target="_blank" style="text-decoration:none;display:inline-block;text-align:center;">🔔 Test stop alerts</a></div>
   </div>
 
@@ -398,10 +399,17 @@ function recordEvent(r, s, isTest, rawMsg, isFinal, whenISO, deferUI, dev, kind,
   if (!deferUI) refreshDatePicker();
   return true;
 }
+/* ===== Show test alerts (v6.34, Maintenance toggle) =====
+   Persisted per page; unset = OFF. OFF: test events stay recorded but
+   are inert — skipped here in derivation and in log rendering. */
+var SHOW_TESTS_KEY = 'follower_show_tests';
+var showTests = false;
+try { showTests = localStorage.getItem(SHOW_TESTS_KEY) === '1'; } catch (e) {}
 function stateFromEvents(r, events) {
   var st = freshRouteState();
   var list = (r === 'AM') ? AM_STOPS : PM_STOPS;
   events.forEach(function (ev) {
+    if (ev.test && !showTests) return;
     var key = (r === 'AM') ? String(ev.stop) : ev.letter;
     var t = new Date(ev.time);
     if (!st.lastUpdate || t > st.lastUpdate) st.lastUpdate = t;
@@ -1026,7 +1034,7 @@ if (HARDCODED_TOPIC) {
 }
 // Re-backfill when tab becomes visible again (mobile browsers suspend SSE in background tabs)
 
-/* ===== Live Tracker (v6.33) =====
+/* ===== Live Tracker (v6.34) =====
    Position layer: subscribes to the Firebase Realtime Database
    position records (REST/SSE, SDK-free) and glides the bus marker
    along the route line between stop events. SEPARATE from the event
@@ -1270,6 +1278,19 @@ if (posTestEl) posTestEl.addEventListener('change', function () {
     try { renderRoute(); } catch (e) {}
   }
 });
+var showTestsEl = document.getElementById('showTestsToggle');
+if (showTestsEl) {
+  showTestsEl.checked = showTests;
+  showTestsEl.addEventListener('change', function () {
+    showTests = !!showTestsEl.checked;
+    try { localStorage.setItem(SHOW_TESTS_KEY, showTests ? '1' : '0'); } catch (e) {}
+    try {
+      restoreToday(); rebuildDevStates();
+      if (viewDate) renderHistoryView(); else rebuildLiveLog();
+      renderRoute();
+    } catch (e) {}
+  });
+}
 
 /* ===== Presence heartbeat =====
    Publish-only: this page pings a derived "-presence" topic every
@@ -1596,6 +1617,7 @@ function handleMessage(raw, opts) {
     if (viewDate) return _addedOb; // history mode: accumulate silently
     if (opts && opts.silent) return _addedOb; // backfill: rendering deferred to the end
     if (torontoDateKey(_evTimeOb) !== torontoDateKey(new Date())) return _addedOb; // previous-day: history only
+    if (isTest && !showTests) return _addedOb;
     if (_rOb !== route) setRoute(_rOb); // route auto-follow (v6.21)
     var _dsOb = null;
     try {
@@ -1654,6 +1676,7 @@ function handleMessage(raw, opts) {
     if (viewDate) return _addedSk; // history mode: accumulate silently
     if (opts && opts.silent) return _addedSk; // backfill: rendering deferred to the end
     if (torontoDateKey(_evTimeSk) !== torontoDateKey(new Date())) return _addedSk; // previous-day: history only
+    if (isTest && !showTests) return _addedSk;
     if (_rSk !== route) setRoute(_rSk); // route auto-follow (v6.21 parity)
     try {
       var _keySk = _sSk ? _keyFnSk(_sSk) : null;
@@ -1719,6 +1742,7 @@ function handleMessage(raw, opts) {
                              opts && opts.time, opts && opts.deferUI, devF);
     if (viewDate || silent) return addedF;
     if (torontoDateKey(whenF) !== torontoDateKey(new Date())) return addedF;
+    if (isTest && !showTests) return addedF;
     if (r !== route) setRoute(r); // route auto-follow (v6.21): guarded switch, after the date checks
     st.complete = true; st.busIdx = list.length - 1; st.lastUpdate = whenF;
     var keyF = stopKey(list[list.length - 1]);
@@ -1754,6 +1778,7 @@ function applyArrival(r, s, isTest, rawMsg, opts, kind, devArg, lblArg) {
   if (viewDate) return added; // history mode: accumulate silently, don't touch the display
   if (opts && opts.silent) return added; // backfill: rendering deferred to the end
   if (isOld) return added; // previous-day event: history only, no live UI update
+  if (isTest && !showTests) return added;
   if (r !== route) setRoute(r); // route auto-follow (v6.21)
   st.reached[key] = true;
   st.waiting = null; // boarded: clear any waiting state
@@ -1817,6 +1842,7 @@ function applyWaiting(r, s, dev, rawMsg, opts, isTest, label) {
   if (viewDate) return added; // history mode: accumulate silently, don't touch the display
   if (opts && opts.silent) return added; // backfill: rendering deferred to the end
   if (isOld) return added; // previous-day event: history only, no live UI update
+  if (isTest && !showTests) return added;
   if (r !== route) setRoute(r); // route auto-follow (v6.21)
   lastRoute = r;
   var key = (r === 'AM') ? String(s.n) : s.letter;
@@ -1837,6 +1863,7 @@ function applyGotOff(r, s, dev, rawMsg, opts, isTest, label) {
   if (viewDate) return added; // history mode: accumulate silently, don't touch the display
   if (opts && opts.silent) return added; // backfill: rendering deferred to the end
   if (isOld) return added; // previous-day event: history only, no live UI update
+  if (isTest && !showTests) return added;
   if (r !== route) setRoute(r); // route auto-follow (v6.21)
   lastRoute = r;
   var key = (r === 'AM') ? String(s.n) : s.letter;
@@ -1856,6 +1883,7 @@ function applyFinalNew(r, dev, rawMsg, opts, isTest, lblF) {
                           opts && opts.time, opts && opts.deferUI, dev, 'newfinal', lblF ? { label: lblF } : undefined);
   if (viewDate || (opts && opts.silent)) return added;
   if (torontoDateKey(whenF) !== torontoDateKey(new Date())) return added;
+  if (isTest && !showTests) return added;
   if (r !== route) setRoute(r); // route auto-follow (v6.21)
   var st = state[r];
   st.complete = true; st.busIdx = list.length - 1; st.lastUpdate = whenF; st.waiting = null;
@@ -1957,7 +1985,7 @@ function renderHistoryView() {
     log.innerHTML = '<div id="logEmpty">No ' + route + ' events on ' + dateLabel(viewDate) + '.</div>';
   } else {
     var rev = events.slice().reverse();
-    rev.forEach(function (ev) { log.appendChild(logEntryFromEvent(route, ev)); });
+    rev.forEach(function (ev) { if (ev.test && !showTests) return; log.appendChild(logEntryFromEvent(route, ev)); });
   }
   updateDateSummary();
   renderRoute();
@@ -1997,7 +2025,7 @@ function rebuildLiveLog() {
     all = all.filter(function (item) { return fsel.indexOf(item.ev.dev || DEV_UNKNOWN) !== -1; });
   }
   all.sort(function (a, b) { return new Date(b.ev.time) - new Date(a.ev.time); });
-  all.forEach(function (item) { log.appendChild(logEntryFromEvent(item.r, item.ev)); });
+  all.forEach(function (item) { if (item.ev.test && !showTests) return; log.appendChild(logEntryFromEvent(item.r, item.ev)); });
 }
 // AM/PM toggle must re-render history log when in history mode
 var _origSetRoute = setRoute;
