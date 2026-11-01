@@ -79,7 +79,7 @@
 </head>
 <body>
 <header>
-  <h1>&#x1F68C; Bus Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v6.34</span></h1>
+  <h1>&#x1F68C; Bus Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v6.35</span></h1>
   <div class="seg">
     <button id="btnAM" class="on">AM</button>
     <button id="btnPM">PM</button>
@@ -1034,7 +1034,7 @@ if (HARDCODED_TOPIC) {
 }
 // Re-backfill when tab becomes visible again (mobile browsers suspend SSE in background tabs)
 
-/* ===== Live Tracker (v6.34) =====
+/* ===== Live Tracker (v6.35) =====
    Position layer: subscribes to the Firebase Realtime Database
    position records (REST/SSE, SDK-free) and glides the bus marker
    along the route line between stop events. SEPARATE from the event
@@ -1237,22 +1237,83 @@ function posSetRec(tag, rec) {
   posByTag[tag] = rec;
 }
 
+/* ===== Position route switch (v6.35) =====
+   Positions may steer the TAB (never stop state): when a device's
+   record activates for the other route — absent / inactive / route
+   flip -> active, fresh (<= POS_STALE_MS), acc-gated at intake by
+   posSetRec, and inside the current device selection — the follower
+   follows it, once per activation. Manual taps are respected until
+   the next ride's edge. Arriving at the Live view (root-PUT sync,
+   the connect catch-up, returning from History) re-evaluates once:
+   the freshest fresh-active record wins. History never switches. */
+var posSnapMode = false; // true while a root-PUT snapshot is feeding
+function posSwitchSelected(tag) {
+  // The page's own selection semantics: a device is selected unless
+  // the user deselected it (new devices start selected).
+  try { return isDevSelected(tag); } catch (e) { return true; }
+}
+function posFreshRoute(rec) {
+  if (!rec || !rec.active || typeof rec.lat !== 'number') return '';
+  var rr = String(rec.route || '').toUpperCase();
+  if (rr !== 'AM' && rr !== 'PM') return '';
+  if (Date.now() - (rec.ts || 0) > POS_STALE_MS) return '';
+  return rr;
+}
+function posArrivalSwitch() {
+  if (viewDate) return;
+  var bestRoute = '', bestTs = -1;
+  Object.keys(posByTag).forEach(function (t) {
+    if (!posSwitchSelected(t)) return;
+    var rr = posFreshRoute(posByTag[t]);
+    if (!rr) return;
+    var ts = posByTag[t].ts || 0;
+    if (ts > bestTs) { bestTs = ts; bestRoute = rr; }
+  });
+  if (bestRoute && bestRoute !== route) setRoute(bestRoute);
+}
+function posEdgeSwitch(tag, was) {
+  if (posSnapMode || viewDate) return;
+  var rr = posFreshRoute(posByTag[tag]);
+  if (!rr || rr === route) return;
+  // Continuation only if the prior record was active, same-route AND
+  // fresh: a stale record rendered nothing, so a fresh fix after a
+  // >90 s silence is a re-activation and switches like a new ride.
+  if (was && was.active && String(was.route || '').toUpperCase() === rr
+      && Date.now() - (was.ts || 0) <= POS_STALE_MS) return;
+  if (!posSwitchSelected(tag)) return;
+  setRoute(rr);
+}
 function posOnEvent(pathStr, data, isPatch) {
   if (!pathStr || pathStr === '/') {
-    if (!isPatch) posByTag = {};
-    if (data) Object.keys(data).forEach(function (t) { posSetRec(t, data[t]); });
+    if (!isPatch) {
+      // Full snapshot (initial sync / reconnect resync): re-feed with
+      // per-record edges suppressed, then evaluate arrival once.
+      posSnapMode = true;
+      posByTag = {};
+      if (data) Object.keys(data).forEach(function (t) { posSetRec(t, data[t]); });
+      posSnapMode = false;
+      posArrivalSwitch();
+      return;
+    }
+    if (data) Object.keys(data).forEach(function (t) {
+      var wasP = posByTag[t];
+      posSetRec(t, data[t]);
+      posEdgeSwitch(t, wasP);
+    });
     return;
   }
   var tag = pathStr.slice(1);
   if (data === null) { delete posByTag[tag]; return; }
+  var was = posByTag[tag];
   if (isPatch && posByTag[tag] && posByTag[tag].active) {
     var merged = {};
     Object.keys(posByTag[tag]).forEach(function (k) { merged[k] = posByTag[tag][k]; });
     Object.keys(data).forEach(function (k) { merged[k] = data[k]; });
     posSetRec(tag, merged);
-    return;
+  } else {
+    posSetRec(tag, data);
   }
-  posSetRec(tag, data);
+  posEdgeSwitch(tag, was);
 }
 
 function posSubscribe() {
@@ -1383,6 +1444,7 @@ document.addEventListener('visibilitychange', function () {
       if (n > 0) {
         refreshDatePicker();
         applyStartingRoute();
+        posArrivalSwitch();
         if (!viewDate) { rebuildLiveLog(); renderRoute(); }
         addLog('Caught up: ' + n + ' new alert' + (n === 1 ? '' : 's') + ' while away.', 'SYNC', '');
       }
@@ -1997,6 +2059,7 @@ document.getElementById('dateSelect').addEventListener('change', function () {
     // Rebuild live log from today's accumulated history
     rebuildLiveLog();
     renderRoute();
+    posArrivalSwitch();
   } else {
     viewDate = v;
     renderHistoryView();
