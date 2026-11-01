@@ -77,7 +77,7 @@
 </head>
 <body>
 <header>
-  <h1>&#x1F68C; St Cecilia Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v5.34</span></h1>
+  <h1>&#x1F68C; St Cecilia Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v5.35</span></h1>
   <div class="seg">
     <button id="btnAM" class="on">AM</button>
     <button id="btnPM">PM</button>
@@ -110,7 +110,7 @@
 <section>
   <h2>Channel</h2>
   <div class="row">
-    <input type="text" id="topicInput" placeholder="ntfy channel name" autocomplete="off" value="00-St-Celia-gh45lt-Stc" readonly />
+    <input type="text" id="topicInput" placeholder="ntfy channel name" autocomplete="off" value="01-St-Celia-gh45lt-Stc" readonly />
     <button class="act" id="connBtn">Connect</button>
     <button class="act ghost" id="refreshBtn" title="Re-check for new alerts">↻</button>
   </div>
@@ -976,7 +976,7 @@ var topicInput = document.getElementById('topicInput');
 var connBtn = document.getElementById('connBtn');
 var connDot = document.getElementById('connDot');
 // Built-in channel — the only authority (the input below is a read-only display)
-var HARDCODED_TOPIC = '00-St-Celia-gh45lt-Stc';
+var HARDCODED_TOPIC = '01-St-Celia-gh45lt-Stc';
 // Channel cleanup (v5.18): the built-in channel is the only authority.
 // Overwrite any stale stored channel once at startup; the input only displays it.
 try { localStorage.setItem('stceciliafollower_topic', HARDCODED_TOPIC); } catch (e) {}
@@ -1009,7 +1009,7 @@ if (HARDCODED_TOPIC) {
 }
 // Re-backfill when tab becomes visible again (mobile browsers suspend SSE in background tabs)
 
-/* ===== Live Tracker (v5.34) =====
+/* ===== Live Tracker (v5.35) =====
    Position layer: subscribes to the Firebase Realtime Database
    position records (REST/SSE, SDK-free) and glides the bus marker
    along the route line between stop events. SEPARATE from the event
