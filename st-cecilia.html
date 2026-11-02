@@ -47,7 +47,8 @@
   details.help summary { cursor:pointer; font-weight:700; color:var(--txt); }
   .pin { width:28px; height:28px; border-radius:50%; background:#fff; border:2px solid var(--green); color:var(--green); display:grid; place-items:center; font-weight:800; font-size:.8rem; }
   .pin.done { background:var(--green); color:#fff; }
-  .pin.next { box-shadow:0 0 0 4px rgba(53,208,127,.45); }
+  .pin.next { box-shadow:0 0 0 4px rgba(53,208,127,.45); animation:nextPulse 1.6s ease-out infinite; }
+  @keyframes nextPulse { 0% { box-shadow:0 0 0 3px rgba(53,208,127,.65); } 70% { box-shadow:0 0 0 13px rgba(53,208,127,0); } 100% { box-shadow:0 0 0 3px rgba(53,208,127,0); } }
   .pin.skipped { background:#e5e7eb; border-color:#9ca3af; color:#9ca3af; }
   .busdot { width:22px; height:22px; border-radius:50%; background:#2f8bff; border:3px solid #fff; box-shadow:0 0 0 3px rgba(47,139,255,.4), 0 2px 8px rgba(0,0,0,.5); }
   .arrivedlbl { background:var(--green); color:#fff; font-weight:800; font-size:15px; padding:5px 16px; border-radius:18px; text-align:center; white-space:nowrap; box-shadow:0 2px 6px rgba(0,0,0,.35); }
@@ -77,7 +78,7 @@
 </head>
 <body>
 <header>
-  <h1>&#x1F68C; St Cecilia Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v5.40</span></h1>
+  <h1>&#x1F68C; St Cecilia Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v5.41</span></h1>
   <div class="seg">
     <button id="btnAM" class="on">AM</button>
     <button id="btnPM">PM</button>
@@ -186,7 +187,7 @@ var DEVLS_OFF = 'stcfollower_dev_off';
 var devStates = {};   /* dev -> { AM: routeState, PM: routeState } */
 var busMarkers = {};  /* dev -> L.marker, used when a subset of devices is shown */
 
-function freshRouteState() { return { reached: {}, skipped: {}, busIdx: -1, complete: false, lastUpdate: null, waiting: null, done: false, offStop: null, delaySec: null, delayStop: null, delayTime: null }; }
+function freshRouteState() { return { reached: {}, skipped: {}, busIdx: -1, complete: false, lastUpdate: null, waiting: null, done: false, offStop: null, delaySec: null, delayStop: null, delayTime: null, hintIdx: null }; }
 // v5.20: progress "passed" = true arrivals ∪ look-ahead skips (reached stays arrival-only).
 function passedCount(st) {
   var seen = {};
@@ -440,6 +441,7 @@ function stateFromEvents(r, events) {
     if (!st.lastUpdate || t > st.lastUpdate) st.lastUpdate = t;
     if (ev.kind === 'wait') { if (st.busIdx < 0 && !st.waiting) { st.waiting = key; st.waitLabel = ev.label || ''; } st.delaySec = null; st.delayStop = null; st.delayTime = null; return; }
     if (ev.kind === 'skip') { st.skipped[key] = true; return; }
+    if (ev.kind === 'start') { if (st.busIdx < 0 && !st.onBus) { var hIdx = -1; list.forEach(function (s2, i2) { if (((r === 'AM') ? String(s2.n) : s2.letter) === key) hIdx = i2; }); if (hIdx >= 0 && (st.hintIdx == null || hIdx > st.hintIdx)) st.hintIdx = hIdx; } return; }
     if (ev.kind === 'off') { st.reached[key] = true; st.done = true; st.offStop = key; st.offLabel = ''; st.waiting = null; st.delaySec = null; st.delayStop = null; st.delayTime = null; return; }
     if (ev.kind === 'onbus') {
       if (st.waiting) {
@@ -650,11 +652,12 @@ function renderRoute() {
   var st = displayStateFor(route), list = stops();
   var rideOver = (st.complete || st.done) && allDevicesDone(route);
   list.forEach(function (s, i) {
+  var nextIdx = (st.busIdx < 0 && !st.onBus && st.hintIdx != null) ? st.hintIdx : st.busIdx + 1;
     var key = stopKey(s);
     var cls;
     // v5.20 precedence: arrived-green > next-ring > skipped-grey.
     if (st.reached[key]) cls = 'done';
-    else if (!rideOver && i === st.busIdx + 1) cls = 'next';
+    else if (!rideOver && i === nextIdx) cls = 'next';
     else if (st.skipped && st.skipped[key]) cls = 'skipped';
     else if (rideOver) cls = 'skipped';
     else cls = '';
@@ -1013,7 +1016,7 @@ if (HARDCODED_TOPIC) {
 }
 // Re-backfill when tab becomes visible again (mobile browsers suspend SSE in background tabs)
 
-/* ===== Live Tracker (v5.40) =====
+/* ===== Live Tracker (v5.41) =====
    Position layer: subscribes to the Firebase Realtime Database
    position records (REST/SSE, SDK-free) and glides the bus marker
    along the route line between stop events. SEPARATE from the event
@@ -1721,6 +1724,7 @@ function handleMessage(raw, opts) {
   // "📱 [A30] off bus. Tracking stopped." -> info only
   // "📱 [X##] on bus, heading to Stop N: ..." -> parse and clear waiting
   var mOnBus = msg.match(new RegExp('^' + PHONE + ' \\[([AiW][0-9]{2})\\](?: \\(([^)]+)\\))? on bus, heading to Stop ([1-9A-I])(?: \\((\\d+)\\))?:'));
+  var mStart = msg.match(new RegExp('^' + PHONE + ' \\[([AiW][0-9]{2})\\](?: \\(([^)]+)\\))? starting at Stop ([1-9A-I])(?: \\(\\d+\\))?[:.]'));
   if (mOnBus) {
     var _devOb = mOnBus[1];
     var _labelOb = mOnBus[2] || '';
@@ -1822,8 +1826,8 @@ function handleMessage(raw, opts) {
     return true;
   }
   var silent = !!(opts && opts.silent);
-  if (mWait || mOff || mBusAt || mArr || mArrF) {
-    return handleNewFormat(mWait, mOff, mBusAt, mArr, mArrF, msg, isTest, raw, opts, silent);
+  if (mWait || mOff || mBusAt || mArr || mArrF || mStart) {
+    return handleNewFormat(mWait, mOff, mBusAt, mArr, mArrF, mStart, msg, isTest, raw, opts, silent);
   }
   // St Cecilia AM: "🚌 Stop 1: <name> reached." PM: "🚌 Stop A (5): <name> reached." (legacy)
   var mStop = msg.match(new RegExp('^' + BUS + ' Stop ([1-9A-I])(?: \\(\\d+\\))?[:.]'));
@@ -1929,12 +1933,12 @@ function applyArrival(r, s, isTest, rawMsg, opts, kind, devArg, lblArg) {
 }
 
 /* ===== New "My Stop" formats (v3.3+) ===== */
-function handleNewFormat(mWait, mOff, mBusAt, mArr, mArrF, msg, isTest, raw, opts, silent) {
-  var m = mWait || mOff || mBusAt || mArr || mArrF;
+function handleNewFormat(mWait, mOff, mBusAt, mArr, mArrF, mStart, msg, isTest, raw, opts, silent) {
+  var m = mWait || mOff || mBusAt || mArr || mArrF || mStart;
   var dev = m[1];
   registerDevice(dev);
   var r = route, s = null;
-  if (mWait || mOff || mBusAt || mArr) {
+  if (mWait || mOff || mBusAt || mArr || mStart) {
     var label = m[3];
     r = /^[1-9]$/.test(label) ? 'AM' : 'PM';
     routeStops(r).forEach(function (x) { if (x.letter === label) s = x; });
@@ -1946,6 +1950,7 @@ function handleNewFormat(mWait, mOff, mBusAt, mArr, mArrF, msg, isTest, raw, opt
   }
   if (mWait) return applyWaiting(r, s, dev, raw, opts, isTest, mWait[2] || '');
   if (mOff) return applyGotOff(r, s, dev, raw, opts, isTest, mOff[2] || '');
+  if (mStart) return applyStarting(r, s, dev, raw, opts, isTest, mStart[2] || '');
   if (mBusAt && /Route complete\.\s*$/.test(msg)) return applyFinalNew(r, dev, raw, opts, isTest, m[2] || '');
   if (mArrF) return applyFinalNew(r, dev, raw, opts, isTest, m[2] || '');
   return applyArrival(r, s, isTest, raw, opts, mArr ? 'newarr' : 'newbus', dev, m[2] || '');
@@ -1970,6 +1975,33 @@ function applyWaiting(r, s, dev, rawMsg, opts, isTest, label) {
   if (r === route) renderRoute();
   return added;
 }
+function applyStarting(r, s, dev, rawMsg, opts, isTest, label) {
+  // v5.41: snap-forward starting notice -> display-only glow
+  // hint. Records the event (replays derive the hint from it) and
+  // mirrors the hint into the live aggregate state; writes NO stop
+  // state and NO log line.
+  var evTime = (opts && opts.time) ? new Date(opts.time) : new Date();
+  var isOld = !viewDate && !(opts && opts.silent) &&
+              torontoDateKey(evTime) !== torontoDateKey(new Date());
+  var added = recordEvent(r, s, isTest, rawMsg, false, opts && opts.time, opts && opts.deferUI, dev, 'start', label ? { label: label } : undefined);
+  if (viewDate) return added; // history mode: accumulate silently
+  if (opts && opts.silent) return added; // backfill: UI deferred
+  if (isOld) return added; // previous-day event: history only
+  if (isTest && !showTests) return added;
+  if (r !== route) setRoute(r); // route auto-follow (v6.21)
+  lastRoute = r;
+  var st = state[r];
+  if (st && st.busIdx < 0 && !st.onBus) {
+    var list = (r === 'AM') ? AM_STOPS : PM_STOPS;
+    var key = (r === 'AM') ? String(s.n) : s.letter;
+    var hIdx = -1;
+    list.forEach(function (s2, i2) { if (((r === 'AM') ? String(s2.n) : s2.letter) === key) hIdx = i2; });
+    if (hIdx >= 0 && (st.hintIdx == null || hIdx > st.hintIdx)) st.hintIdx = hIdx;
+  }
+  if (r === route) renderRoute();
+  return added;
+}
+
 function applyGotOff(r, s, dev, rawMsg, opts, isTest, label) {
   var evTime = (opts && opts.time) ? new Date(opts.time) : new Date();
   var isOld = !viewDate && !(opts && opts.silent) &&
@@ -2099,7 +2131,7 @@ function renderHistoryView() {
     log.innerHTML = '<div id="logEmpty">No ' + route + ' events on ' + dateLabel(viewDate) + '.</div>';
   } else {
     var rev = events.slice().reverse();
-    rev.forEach(function (ev) { if (ev.test && !showTests) return; log.appendChild(logEntryFromEvent(route, ev)); });
+    rev.forEach(function (ev) { if (ev.test && !showTests) return; if (ev.kind === 'start') return; log.appendChild(logEntryFromEvent(route, ev)); });
   }
   updateDateSummary();
   renderRoute();
@@ -2141,7 +2173,7 @@ function rebuildLiveLog() {
     all = all.filter(function (item) { return fsel.indexOf(item.ev.dev || DEV_UNKNOWN) !== -1; });
   }
   all.sort(function (a, b) { return new Date(b.ev.time) - new Date(a.ev.time); });
-  all.forEach(function (item) { if (item.ev.test && !showTests) return; log.appendChild(logEntryFromEvent(item.r, item.ev)); });
+  all.forEach(function (item) { if (item.ev.test && !showTests) return; if (item.ev.kind === 'start') return; log.appendChild(logEntryFromEvent(item.r, item.ev)); });
 }
 // AM/PM toggle must re-render history log when in history mode
 var _origSetRoute = setRoute;
