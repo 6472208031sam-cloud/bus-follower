@@ -79,7 +79,7 @@
 </head>
 <body>
 <header>
-  <h1>&#x1F68C; Bus Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v6.39</span></h1>
+  <h1>&#x1F68C; Bus Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v6.40</span></h1>
   <div class="seg">
     <button id="btnAM" class="on">AM</button>
     <button id="btnPM">PM</button>
@@ -111,7 +111,7 @@
 <section>
   <h2>Channel</h2>
   <div class="row">
-    <input type="text" id="topicInput" placeholder="ntfy channel name" autocomplete="off" value="01-Bus-107-135-gh45lt" readonly />
+    <input type="text" id="topicInput" placeholder="ntfy channel name" autocomplete="off" value="00-Bus-107-135-gh45lt" readonly />
     <button class="act" id="connBtn">Connect</button>
     <button class="act ghost" id="refreshBtn" title="Re-check for new alerts">↻</button>
   </div>
@@ -1001,7 +1001,7 @@ var topicInput = document.getElementById('topicInput');
 var connBtn = document.getElementById('connBtn');
 var connDot = document.getElementById('connDot');
 // Built-in channel — the only authority (the input below is a read-only display)
-var HARDCODED_TOPIC = '01-Bus-107-135-gh45lt';
+var HARDCODED_TOPIC = '00-Bus-107-135-gh45lt';
 // Channel cleanup (v6.20): the built-in channel is the only authority.
 // Overwrite any stale stored channel once at startup; the input only displays it.
 try { localStorage.setItem('busfollower_topic', HARDCODED_TOPIC); } catch (e) {}
@@ -1034,7 +1034,7 @@ if (HARDCODED_TOPIC) {
 }
 // Re-backfill when tab becomes visible again (mobile browsers suspend SSE in background tabs)
 
-/* ===== Live Tracker (v6.39) =====
+/* ===== Live Tracker (v6.40) =====
    Position layer: subscribes to the Firebase Realtime Database
    position records (REST/SSE, SDK-free) and glides the bus marker
    along the route line between stop events. SEPARATE from the event
