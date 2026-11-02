@@ -79,7 +79,7 @@
 </head>
 <body>
 <header>
-  <h1>&#x1F68C; Bus Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v6.40</span></h1>
+  <h1>&#x1F68C; Bus Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v6.41</span></h1>
   <div class="seg">
     <button id="btnAM" class="on">AM</button>
     <button id="btnPM">PM</button>
@@ -659,6 +659,7 @@ function renderRoute() {
       .addTo(pinLayer);
   });
   if (busMarker) { map.removeLayer(busMarker); busMarker = null; }
+  posPillAgg = null; posPillDev = {};
   Object.keys(busMarkers).forEach(function (d) { map.removeLayer(busMarkers[d]); delete busMarkers[d]; });
   if (!allDevsSelected()) {
     selectedDevices().forEach(function (dev) {
@@ -683,6 +684,7 @@ function renderRoute() {
             icon: L.divIcon({ className: '', html: '<div class="waitlbl">' + esc(devWaitText) + '</div>', iconSize: [220, 32], iconAnchor: [110, -18] }),
             zIndexOffset: 1000
           }).addTo(map).bindPopup('<b>' + esc(devWaitText) + '</b>');
+          posPillDev[dev] = { html: '<div class="waitlbl">' + esc(devWaitText) + '</div>', w: 220, h: 32 };
         }
         return;
       }
@@ -728,6 +730,7 @@ function renderRoute() {
       icon: L.divIcon({ className: '', html: '<div class="waitlbl" style="white-space:normal;line-height:1.3;padding:6px 14px;">' + esc(waitText) + '</div>', iconSize: [240, 52], iconAnchor: [120, -30] }),
       zIndexOffset: 1000
     }).addTo(map).bindPopup('<b>' + esc(waitText) + '</b>');
+    if (agWait) posPillAgg = { html: '<div class="waitlbl" style="white-space:normal;line-height:1.3;padding:6px 14px;">' + esc(waitText) + '</div>', w: 240, h: 52 };
   } else if (st.busIdx >= 0 && st.busIdx < list.length) {
     var b = list[st.busIdx];
     if (st.onBus) {
@@ -747,6 +750,7 @@ function renderRoute() {
         icon: L.divIcon({ className: '', html: '<div class="waitlbl" style="background:#0b6e4f;white-space:normal;line-height:1.3;padding:6px 14px;">' + esc(onBusText) + '</div>', iconSize: [240, 52], iconAnchor: [120, -30] }),
         zIndexOffset: 1000
       }).addTo(map).bindPopup('<b>' + esc(onBusText) + '</b>');
+      posPillAgg = { html: '<div class="waitlbl" style="background:#0b6e4f;white-space:normal;line-height:1.3;padding:6px 14px;">' + esc(onBusText) + '</div>', w: 240, h: 52 };
     } else {
       busMarker = L.marker([b.lat, b.lng], {
         icon: L.divIcon({ className: '', html: '<div class="busdot"></div>', iconSize: [22, 22], iconAnchor: [11, 11] }),
@@ -1034,7 +1038,7 @@ if (HARDCODED_TOPIC) {
 }
 // Re-backfill when tab becomes visible again (mobile browsers suspend SSE in background tabs)
 
-/* ===== Live Tracker (v6.40) =====
+/* ===== Live Tracker (v6.41) =====
    Position layer: subscribes to the Firebase Realtime Database
    position records (REST/SSE, SDK-free) and glides the bus marker
    along the route line between stop events. SEPARATE from the event
@@ -1139,15 +1143,34 @@ function posSetPopup(key, marker, rec, stale) {
    its predecessor. posApplyIcon no-ops when the driven marker
    already carries the right icon, so steady drives cost nothing.
    The record is cleared by posForget (ride end / off-route drop). */
-var posIconMark = {}; // key -> {marker, stale}
+var posIconMark = {}; // key -> {marker, stale, pill}
+// (v6.41) Composite driven icon: while the aggregate state is waiting
+// or on-bus (or a device is waiting), renderRoute stashes that branch's
+// pill HTML; the driven icon stacks the pill ABOVE the dot, so the
+// event label and the live position show together instead of the dot
+// replacing the pill on every marker recreation.
+var posPillAgg = null; // {html, w, h} for the aggregate key, or null
+var posPillDev = {}; // dev -> {html, w, h}
+function posPillFor(key) { return key === '__agg' ? posPillAgg : (posPillDev[key] || null); }
+function posPillKey(key) { var p = posPillFor(key); return p ? p.html : ''; }
+function posIconFor(key, color, stale, dev) {
+  var base = posDotIcon(color, stale, dev);
+  var pill = posPillFor(key);
+  if (!pill) return base;
+  var baseHtml = (base && base.options && base.options.html) || (base && base.html) || '';
+  var dotH = dev ? 46 : 22;
+  var dotAnchorY = dev ? 14 : 11;
+  var w = Math.max(pill.w, dev ? 46 : 22);
+  return L.divIcon({ className: '', html: '<div style="text-align:center">' + pill.html + '<div style="display:flex;justify-content:center;margin-top:4px">' + baseHtml + '</div></div>', iconSize: [w, pill.h + 4 + dotH], iconAnchor: [Math.round(w / 2), pill.h + 4 + dotAnchorY] });
+}
 function posNeedsIcon(key, marker, stale) {
   var applied = posIconMark[key];
-  return !(applied && applied.marker === marker && applied.stale === stale);
+  return !(applied && applied.marker === marker && applied.stale === stale && applied.pill === posPillKey(key));
 }
 function posApplyIcon(key, marker, color, stale, dev) {
   if (!posNeedsIcon(key, marker, stale)) return;
-  posIconMark[key] = { marker: marker, stale: stale };
-  try { marker.setIcon(posDotIcon(color, stale, dev)); } catch (e) {}
+  posIconMark[key] = { marker: marker, stale: stale, pill: posPillKey(key) };
+  try { marker.setIcon(posIconFor(key, color, stale, dev)); } catch (e) {}
 }
 
 function posDriveMarker(key, marker, rec, color, dev) {
