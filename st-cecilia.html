@@ -77,7 +77,7 @@
 </head>
 <body>
 <header>
-  <h1>&#x1F68C; St Cecilia Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v5.36</span></h1>
+  <h1>&#x1F68C; St Cecilia Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v5.37</span></h1>
   <div class="seg">
     <button id="btnAM" class="on">AM</button>
     <button id="btnPM">PM</button>
@@ -1009,7 +1009,7 @@ if (HARDCODED_TOPIC) {
 }
 // Re-backfill when tab becomes visible again (mobile browsers suspend SSE in background tabs)
 
-/* ===== Live Tracker (v5.36) =====
+/* ===== Live Tracker (v5.37) =====
    Position layer: subscribes to the Firebase Realtime Database
    position records (REST/SSE, SDK-free) and glides the bus marker
    along the route line between stop events. SEPARATE from the event
@@ -1069,7 +1069,7 @@ function posStaleNoteFor(tag) {
 }
 function posStaleNoteAgg() { return posStaleNoteFor(posDriverTag); }
 
-function posForget(key) { delete posMode[key]; delete posAnim[key]; }
+function posForget(key) { delete posMode[key]; delete posAnim[key]; delete posIconMark[key]; }
 
 /* ===== Position dot popup (v5.36) =====
    One compose for both dot modes, mirroring the test branch's
@@ -1106,6 +1106,25 @@ function posSetPopup(key, marker, rec, stale) {
   } catch (e) {}
 }
 
+/* ===== Marker-instance icon state (v5.37) =====
+   Icon state is keyed to the marker INSTANCE, not just the stream:
+   renderRoute recreates markers on every render, and a recreated
+   marker must receive the icon (and the stale popup) its stream's
+   state calls for, even when the live/stale transition fired for
+   its predecessor. posApplyIcon no-ops when the driven marker
+   already carries the right icon, so steady drives cost nothing.
+   The record is cleared by posForget (ride end / off-route drop). */
+var posIconMark = {}; // key -> {marker, stale}
+function posNeedsIcon(key, marker, stale) {
+  var applied = posIconMark[key];
+  return !(applied && applied.marker === marker && applied.stale === stale);
+}
+function posApplyIcon(key, marker, color, stale, dev) {
+  if (!posNeedsIcon(key, marker, stale)) return;
+  posIconMark[key] = { marker: marker, stale: stale };
+  try { marker.setIcon(posDotIcon(color, stale, dev)); } catch (e) {}
+}
+
 function posDriveMarker(key, marker, rec, color, dev) {
   if (!marker) return;
   var raw = posTest && key === '__agg';
@@ -1132,17 +1151,17 @@ function posDriveMarker(key, marker, rec, color, dev) {
   if (age > POS_STALE_MS) {
     if (posMode[key] !== 'stale') {
       posMode[key] = 'stale';
-      try { marker.setIcon(posDotIcon(color, true, dev)); } catch (e) {}
-      posSetPopup(key, marker, rec, true);
       try { renderStatus(); } catch (e) {}
     }
+    if (posNeedsIcon(key, marker, true)) posSetPopup(key, marker, rec, true);
+    posApplyIcon(key, marker, color, true, dev);
     return; // dot stays at its last live spot, greyed
   }
   if (posMode[key] !== 'live') {
     posMode[key] = 'live';
-    try { marker.setIcon(posDotIcon(color, false, dev)); } catch (e) {}
     try { renderStatus(); } catch (e) {}
   }
+  posApplyIcon(key, marker, color, false, dev);
   if (raw) {
     // Position test: true coordinates — no projection, no glide —
     // and the popup carries the raw readout. renderRoute rebinds
