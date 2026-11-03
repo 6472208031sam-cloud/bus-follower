@@ -80,7 +80,7 @@
 </head>
 <body>
 <header>
-  <h1>&#x1F68C; Bus Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v6.42</span></h1>
+  <h1>&#x1F68C; Bus Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v6.43</span></h1>
   <div class="seg">
     <button id="btnAM" class="on">AM</button>
     <button id="btnPM">PM</button>
@@ -1041,7 +1041,7 @@ if (HARDCODED_TOPIC) {
 }
 // Re-backfill when tab becomes visible again (mobile browsers suspend SSE in background tabs)
 
-/* ===== Live Tracker (v6.42) =====
+/* ===== Live Tracker (v6.43) =====
    Position layer: subscribes to the Firebase Realtime Database
    position records (REST/SSE, SDK-free) and glides the bus marker
    along the route line between stop events. SEPARATE from the event
@@ -1840,7 +1840,9 @@ function handleMessage(raw, opts) {
     var _dev = mOffBus[1];
     registerDevice(_dev);
     var _obLbl2 = mOffBus[2] ? ' (' + mOffBus[2] + ')' : '';
-    addLog('\uD83D\uDCF1 [' + _dev + ']' + _obLbl2 + ' off bus \u2014 tracking stopped.', 'PM', '');
+    // v6.43: standard plumbing - silent during backfill /
+    // history view, and stamp the message's own ntfy time.
+    if (!viewDate && !(opts && opts.silent)) addLog('\uD83D\uDCF1 [' + _dev + ']' + _obLbl2 + ' off bus \u2014 tracking stopped.', 'PM', '', opts && opts.time);
     return true;
   }
   var silent = !!(opts && opts.silent);
