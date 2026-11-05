@@ -20,17 +20,18 @@
   .watchname { font-weight: 700; letter-spacing: .08em; font-size: .85rem; }
   .watchnum { font-size: 2.2rem; font-weight: 800; line-height: 1.15; }
   .watchsub { font-size: .8rem; opacity: .75; }
+  .watchsub2 { font-size: .8rem; font-weight: 700; margin-top: 2px; }
 </style>
 </head>
 <body>
-<h1>ntfy Alert Test <span style="font-size:0.6em;opacity:0.7;font-weight:normal;">v2.17</span></h1>
+<h1>ntfy Alert Test <span style="font-size:0.6em;opacity:0.7;font-weight:normal;">v2.18</span></h1>
 <p style="font-size:0.9rem;opacity:0.85;">Channel: <code id="chanName" style="background:#222;padding:0.15rem 0.5rem;border-radius:4px;user-select:all;"></code></p>
 <p>Sends <strong>TEST</strong> alerts to the channel saved in the Bus Follower page.</p>
 
 <h2>Watching now</h2>
 <div class="row" style="gap:10px;">
-  <div class="watchcard"><div class="watchname">BUS</div><div class="watchnum" id="watchBus">&ndash;</div><div class="watchsub" id="watchBusSub">connecting&hellip;</div></div>
-  <div class="watchcard"><div class="watchname">ST CECILIA</div><div class="watchnum" id="watchStc">&ndash;</div><div class="watchsub" id="watchStcSub">connecting&hellip;</div></div>
+  <div class="watchcard"><div class="watchname">BUS</div><div class="watchnum" id="watchBus">&ndash;</div><div class="watchsub" id="watchBusSub">connecting&hellip;</div><div class="watchsub2" id="watchBusDay">&ndash;</div></div>
+  <div class="watchcard"><div class="watchname">ST CECILIA</div><div class="watchnum" id="watchStc">&ndash;</div><div class="watchsub" id="watchStcSub">connecting&hellip;</div><div class="watchsub2" id="watchStcDay">&ndash;</div></div>
 </div>
 <p style="font-size:0.85rem;opacity:0.8;">Approximate &mdash; counts open follower pages by anonymous device ID (stored ID + fingerprint). Includes any follower page you have open yourself. Parents see nothing; the follower pages show no count.</p>
 
@@ -306,16 +307,76 @@ function clearChannel() {
    TOPIC + '-presence' / ST_TOPIC + '-presence'. This page only
    listens: seed the last ~4 min by poll, subscribe live, and count
    composite IDs heard within 3 min — aged by each message's own
-   ntfy timestamp, never by receipt time. This page never pings. */
+   ntfy timestamp, never by receipt time. This page never pings.
+   v2.18: Daily Unique Watchers — per app, distinct composite IDs
+   heard on the current America/Toronto day. Derived per load from
+   a midnight seed plus live heartbeats; nothing is stored between
+   loads (Domi's pick, 2026-11-05). The daily sets are separate
+   from the 3-min `seen` maps, so watchPurge never evicts them. */
 var WATCH = {
-  bus: { topic: TOPIC + '-presence', seen: {}, up: false },
-  stc: { topic: ST_TOPIC + '-presence', seen: {}, up: false }
+  bus: { topic: TOPIC + '-presence', seen: {}, daily: {}, up: false },
+  stc: { topic: ST_TOPIC + '-presence', seen: {}, daily: {}, up: false },
+  dayKey: '', dayStartMs: 0
 };
+var _torFmt = new Intl.DateTimeFormat('en-US', { timeZone: 'America/Toronto', year: 'numeric', month: '2-digit', day: '2-digit' });
+var _torFmtFull = new Intl.DateTimeFormat('en-US', { timeZone: 'America/Toronto', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23' });
+function torontoDayKey(ms) {
+  var parts = _torFmt.formatToParts(new Date(ms)), y = '', mo = '', d = '';
+  for (var i = 0; i < parts.length; i++) {
+    if (parts[i].type === 'year') y = parts[i].value;
+    else if (parts[i].type === 'month') mo = parts[i].value;
+    else if (parts[i].type === 'day') d = parts[i].value;
+  }
+  return y + '-' + mo + '-' + d;
+}
+function torontoOffsetMs(ms) {
+  var parts = _torFmtFull.formatToParts(new Date(ms)), o = {};
+  for (var i = 0; i < parts.length; i++) o[parts[i].type] = parts[i].value;
+  var asUTC = Date.UTC(+o.year, +o.month - 1, +o.day, (+o.hour) % 24, +o.minute, +o.second);
+  return asUTC - Math.floor(ms / 1000) * 1000;
+}
+function torontoMidnightMs(ms) {
+  var p = torontoDayKey(ms).split('-');
+  var utcGuess = Date.UTC(+p[0], +p[1] - 1, +p[2], 0, 0, 0);
+  var off1 = torontoOffsetMs(utcGuess);
+  var mid = utcGuess - off1;
+  var off2 = torontoOffsetMs(mid);
+  if (off2 !== off1) mid = utcGuess - off2;
+  return mid;
+}
 function watchRecord(which, body, timeMs) {
   var m = /^W1\|([^|]+)\|([0-9a-f]+)$/.exec(String(body || '').trim());
   if (!m) return false;
   WATCH[which].seen[m[1] + '|' + m[2]] = timeMs;
+  if (WATCH.dayKey && timeMs >= WATCH.dayStartMs && torontoDayKey(timeMs) === WATCH.dayKey) {
+    WATCH[which].daily[m[1] + '|' + m[2]] = 1;
+  }
   return true;
+}
+function watchDaySync() {
+  var now = Date.now();
+  var key = torontoDayKey(now);
+  if (WATCH.dayKey === key) return;
+  WATCH.dayKey = key;
+  WATCH.dayStartMs = torontoMidnightMs(now);
+  WATCH.bus.daily = {};
+  WATCH.stc.daily = {};
+  watchDailySeed('bus');
+  watchDailySeed('stc');
+}
+function watchDailySeed(which) {
+  var w = WATCH[which];
+  var since = Math.floor(WATCH.dayStartMs / 1000);
+  fetch('https://ntfy.sh/' + encodeURIComponent(w.topic) + '/json?poll=1&since=' + since)
+    .then(function (r) { return r.text(); })
+    .then(function (txt) {
+      String(txt).split('\n').forEach(function (line) {
+        if (!line.trim()) return;
+        try { var o = JSON.parse(line); if (o.event === 'message') watchRecord(which, o.message, (o.time || 0) * 1000); } catch (e) {}
+      });
+      watchRender();
+    })
+    .catch(function () {});
 }
 function watchPurge(nowMs) {
   ['bus', 'stc'].forEach(function (k) {
@@ -325,12 +386,17 @@ function watchPurge(nowMs) {
 }
 function watchCount(which) { return Object.keys(WATCH[which].seen).length; }
 function watchRender() {
+  watchDaySync();
   watchPurge(Date.now());
-  [['bus', 'watchBus', 'watchBusSub'], ['stc', 'watchStc', 'watchStcSub']].forEach(function (t) {
-    var numEl = document.getElementById(t[1]), subEl = document.getElementById(t[2]);
-    if (!numEl || !subEl) return;
-    if (!WATCH[t[0]].up) { numEl.textContent = '–'; subEl.textContent = 'unavailable'; }
-    else { numEl.textContent = String(watchCount(t[0])); subEl.textContent = 'watching · heard in the last 3 min'; }
+  [['bus', 'watchBus', 'watchBusSub', 'watchBusDay'], ['stc', 'watchStc', 'watchStcSub', 'watchStcDay']].forEach(function (t) {
+    var numEl = document.getElementById(t[1]), subEl = document.getElementById(t[2]), dayEl = document.getElementById(t[3]);
+    if (!numEl || !subEl || !dayEl) return;
+    if (!WATCH[t[0]].up) { numEl.textContent = '–'; subEl.textContent = 'unavailable'; dayEl.textContent = '–'; }
+    else {
+      numEl.textContent = String(watchCount(t[0]));
+      subEl.textContent = 'watching · heard in the last 3 min';
+      dayEl.textContent = String(Object.keys(WATCH[t[0]].daily).length) + ' unique today';
+    }
   });
 }
 function watchSeed(which) {
@@ -356,6 +422,7 @@ function watchSubscribe(which) {
     try { var o = JSON.parse(ev.data); if (o.event === 'message') { watchRecord(which, o.message, (o.time || 0) * 1000); watchRender(); } } catch (e) {}
   };
 }
+try { watchDaySync(); } catch (e) {}
 try { watchSeed('bus'); } catch (e) {}
 try { watchSeed('stc'); } catch (e) {}
 try { watchSubscribe('bus'); } catch (e) {}
