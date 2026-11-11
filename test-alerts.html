@@ -38,7 +38,7 @@
 </style>
 </head>
 <body>
-<h1>ntfy Alert Test <span style="font-size:0.6em;opacity:0.7;font-weight:normal;">v2.21</span></h1>
+<h1>ntfy Alert Test <span style="font-size:0.6em;opacity:0.7;font-weight:normal;">v2.22</span></h1>
 
 <h2>Watching now</h2>
 <div class="row" style="gap:10px;">
@@ -332,6 +332,8 @@ function clearChannel() {
    listens: seed the last ~4 min by poll, subscribe live, and count
    composite IDs heard within 3 min — aged by each message's own
    ntfy timestamp, never by receipt time. This page never pings.
+   v2.22: watcher names may contain periods too (follower
+   cleanTag and the suffix pattern below both allow [A-Za-z0-9.-]).
    v2.21: channel moved from the page top into each section
    (chips filled from TOPIC / ST_TOPIC; the StC AM line's retyped
    copy is gone).
@@ -379,7 +381,7 @@ function torontoMidnightMs(ms) {
   return mid;
 }
 function watchRecord(which, body, timeMs) {
-  var m = /^W1\|([^|]+)\|([0-9a-f]+)(?:-([A-Za-z0-9-]{1,16}))?$/.exec(String(body || '').trim());
+  var m = /^W1\|([^|]+)\|([0-9a-f]+)(?:-([A-Za-z0-9.-]{1,16}))?$/.exec(String(body || '').trim());
   if (!m) return false;
   var wid = m[1] + '|' + m[2];
   var cur = WATCH[which].seen[wid];

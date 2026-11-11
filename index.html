@@ -86,7 +86,7 @@
 </head>
 <body>
 <header>
-  <h1>&#x1F68C; Bus Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v6.46</span></h1>
+  <h1>&#x1F68C; Bus Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v6.47</span></h1>
   <div class="seg">
     <button id="btnAM" class="on">AM</button>
     <button id="btnPM">PM</button>
@@ -140,7 +140,7 @@
       <div class="taglabel"><b>Watcher name</b> &mdash; appended to this page's heartbeat ID (one shared name for both follower pages in this browser)</div>
       <div class="tagid" id="tagIdLine">W1|&hellip;</div>
       <div class="tagform"><input type="text" id="tagNameBox" value="blank" autocomplete="off" autocapitalize="off" spellcheck="false" /> <button class="act ghost" id="tagSaveBtn" type="button">Save</button></div>
-      <div class="taghint">Single word, letters / digits / hyphens, max 16. Save with the box empty resets to &ldquo;blank&rdquo;.</div>
+      <div class="taghint">Single word, letters / digits / hyphens / periods, max 16. Save with the box empty resets to &ldquo;blank&rdquo;.</div>
     </div>
     <label class="devrow"><input type="checkbox" id="posTestToggle" checked /> <b>Position test</b> — raw live dot from positions alone (testing only; on by default for now)</label>
     <label class="devrow"><input type="checkbox" id="showTestsToggle" /> <b>Show test alerts</b> — 🔔 TEST events apply and appear in the log (off = recorded but hidden, no effect)</label>
@@ -1053,7 +1053,7 @@ if (HARDCODED_TOPIC) {
 }
 // Re-backfill when tab becomes visible again (mobile browsers suspend SSE in background tabs)
 
-/* ===== Live Tracker (v6.46) =====
+/* ===== Live Tracker (v6.47) =====
    Position layer: subscribes to the Firebase Realtime Database
    position records (REST/SSE, SDK-free) and glides the bus marker
    along the route line between stop events. SEPARATE from the event
@@ -1169,7 +1169,7 @@ var posPillAgg = null; // {html, w, h} for the aggregate key, or null
 var posPillDev = {}; // dev -> {html, w, h}
 function posPillFor(key) { return key === '__agg' ? posPillAgg : (posPillDev[key] || null); }
 function posPillKey(key) { var p = posPillFor(key); return p ? p.html : ''; }
-// (v6.46) Speed chip + bus icon: the driven stack gains a
+// (v6.47) Speed chip + bus icon: the driven stack gains a
 // speed chip BELOW the centre (writer-reported spd on the position
 // record; shown always while the dot is live, hidden when stale)
 // and, while the device is on the bus, a bare bus glyph in place
@@ -1558,12 +1558,12 @@ if (showTestsEl) {
       return fnv(parts.join('|'));
     }
     var FP = fingerprint();
-    /* Watcher name tag (v6.46): one shared tag per browser
+    /* Watcher name tag (v6.47): one shared tag per browser
        (localStorage follower_tag_name), appended to every heartbeat
        as -<tag>; defaults to "blank" until a name is set. */
     var TAG_KEY = 'follower_tag_name';
     function cleanTag(s) {
-      var t = String(s == null ? '' : s).replace(/[^A-Za-z0-9-]/g, '').slice(0, 16);
+      var t = String(s == null ? '' : s).replace(/[^A-Za-z0-9.-]/g, '').slice(0, 16);
       return t === '' ? 'blank' : t;
     }
     function readTag() {
