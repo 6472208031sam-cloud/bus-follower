@@ -78,7 +78,7 @@
 </head>
 <body>
 <header>
-  <h1>&#x1F68C; St Cecilia Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v5.42</span></h1>
+  <h1>&#x1F68C; St Cecilia Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v5.43</span></h1>
   <div class="seg">
     <button id="btnAM" class="on">AM</button>
     <button id="btnPM">PM</button>
@@ -1016,7 +1016,7 @@ if (HARDCODED_TOPIC) {
 }
 // Re-backfill when tab becomes visible again (mobile browsers suspend SSE in background tabs)
 
-/* ===== Live Tracker (v5.42) =====
+/* ===== Live Tracker (v5.43) =====
    Position layer: subscribes to the Firebase Realtime Database
    position records (REST/SSE, SDK-free) and glides the bus marker
    along the route line between stop events. SEPARATE from the event
@@ -1097,6 +1097,7 @@ function posPopupHtml(key, rec, stale) {
     lines.push('Live \u00B7 fix ' + Math.max(0, Math.round((Date.now() - (rec.ts || 0)) / 1000)) + ' s ago');
   }
   if (typeof rec.acc === 'number') lines.push('Accuracy \u00B1' + Math.round(rec.acc) + ' m');
+  if (!stale && typeof rec.spd === 'number' && isFinite(rec.spd) && rec.spd >= 0) lines.push('Speed ~' + Math.round(rec.spd) + ' km/h');
   var html = lines.join('<br>');
   if (posTest && key === '__agg') {
     html += '<div style="border-top:1px solid #ddd;margin-top:5px;padding-top:5px">'
@@ -1121,7 +1122,7 @@ function posSetPopup(key, marker, rec, stale) {
    its predecessor. posApplyIcon no-ops when the driven marker
    already carries the right icon, so steady drives cost nothing.
    The record is cleared by posForget (ride end / off-route drop). */
-var posIconMark = {}; // key -> {marker, stale, pill}
+var posIconMark = {}; // key -> {marker, stale, pill, spd, bus}
 // (v5.40) Composite driven icon: while the aggregate state is waiting
 // or on-bus (or a device is waiting), renderRoute stashes that branch's
 // pill HTML; the driven icon stacks the pill ABOVE the dot, so the
@@ -1131,23 +1132,76 @@ var posPillAgg = null; // {html, w, h} for the aggregate key, or null
 var posPillDev = {}; // dev -> {html, w, h}
 function posPillFor(key) { return key === '__agg' ? posPillAgg : (posPillDev[key] || null); }
 function posPillKey(key) { var p = posPillFor(key); return p ? p.html : ''; }
+// (v5.43) Speed chip + bus icon: the driven stack gains a
+// speed chip BELOW the centre (writer-reported spd on the position
+// record; shown always while the dot is live, hidden when stale)
+// and, while the device is on the bus, a bare bus glyph in place
+// of the dot (greyed when stale). Both are per-key state read from
+// the same stores the pill reads, and both join the icon change-
+// mark — a speed-only change must still refresh the icon.
+function posRecFor(key) {
+  var tag = key === '__agg' ? posDriverTag : key;
+  return tag ? posByTag[tag] : null;
+}
+function posSpeedFor(key, stale) {
+  if (stale) return null;
+  var rec = posRecFor(key);
+  return (rec && typeof rec.spd === 'number' && isFinite(rec.spd) && rec.spd >= 0) ? Math.round(rec.spd) : null;
+}
+function posSpeedKey(key, stale) { var s = posSpeedFor(key, stale); return s === null ? '' : String(s); }
+function posOnBusFor(key) {
+  try {
+    var tag = key === '__agg' ? posDriverTag : key;
+    if (!tag) return false;
+    var ds = devStates[tag] && devStates[tag][route];
+    return !!(ds && ds.onBus);
+  } catch (e) { return false; }
+}
+function posBusKey(key) { return posOnBusFor(key) ? 'B' : ''; }
 function posIconFor(key, color, stale, dev) {
   var base = posDotIcon(color, stale, dev);
   var pill = posPillFor(key);
-  if (!pill) return base;
+  var spd = posSpeedFor(key, stale);
+  var bus = posOnBusFor(key);
+  if (!pill && spd === null && !bus) return base;
   var baseHtml = (base && base.options && base.options.html) || (base && base.html) || '';
-  var dotH = dev ? 46 : 22;
-  var dotAnchorY = dev ? 14 : 11;
-  var w = Math.max(pill.w, dev ? 46 : 22);
-  return L.divIcon({ className: '', html: '<div style="text-align:center">' + pill.html + '<div style="display:flex;justify-content:center;margin-top:4px">' + baseHtml + '</div></div>', iconSize: [w, pill.h + 4 + dotH], iconAnchor: [Math.round(w / 2), pill.h + 4 + dotAnchorY] });
+  var centreHtml, centreH, anchorY;
+  if (bus) {
+    var busDiv = '<div style="font-size:34px;line-height:36px;text-shadow:0 2px 6px rgba(0,0,0,.45)' + (stale ? ';filter:grayscale(1);opacity:.55' : '') + '">\uD83D\uDE8C</div>';
+    if (dev) {
+      centreHtml = '<div style="text-align:center">' + busDiv + '<div class="devbuslbl">' + esc(devLabel(dev)) + '</div></div>';
+      centreH = 48; anchorY = 18;
+    } else {
+      centreHtml = busDiv;
+      centreH = 36; anchorY = 18;
+    }
+  } else {
+    centreHtml = baseHtml;
+    centreH = dev ? 46 : 22;
+    anchorY = dev ? 14 : 11;
+  }
+  var chipHtml = '';
+  var chipH = 0;
+  if (spd !== null) {
+    chipHtml = '<div style="margin-top:3px"><span style="background:rgba(0,0,0,.72);color:#fff;font-size:10px;font-weight:600;padding:2px 7px;border-radius:8px;white-space:nowrap">~' + spd + ' km/h</span></div>';
+    chipH = 17;
+  }
+  var topH = pill ? pill.h + 4 : 0;
+  var w = Math.max(pill ? pill.w : 0, dev ? 46 : 22, bus ? 40 : 0, spd !== null ? 52 : 0);
+  var html = '<div style="text-align:center">'
+    + (pill ? pill.html : '')
+    + '<div style="display:flex;justify-content:center;' + (pill ? 'margin-top:4px' : '') + '">' + centreHtml + '</div>'
+    + chipHtml
+    + '</div>';
+  return L.divIcon({ className: '', html: html, iconSize: [w, topH + centreH + chipH], iconAnchor: [Math.round(w / 2), topH + anchorY] });
 }
 function posNeedsIcon(key, marker, stale) {
   var applied = posIconMark[key];
-  return !(applied && applied.marker === marker && applied.stale === stale && applied.pill === posPillKey(key));
+  return !(applied && applied.marker === marker && applied.stale === stale && applied.pill === posPillKey(key) && applied.spd === posSpeedKey(key, stale) && applied.bus === posBusKey(key));
 }
 function posApplyIcon(key, marker, color, stale, dev) {
   if (!posNeedsIcon(key, marker, stale)) return;
-  posIconMark[key] = { marker: marker, stale: stale, pill: posPillKey(key) };
+  posIconMark[key] = { marker: marker, stale: stale, pill: posPillKey(key), spd: posSpeedKey(key, stale), bus: posBusKey(key) };
   try { marker.setIcon(posIconFor(key, color, stale, dev)); } catch (e) {}
 }
 

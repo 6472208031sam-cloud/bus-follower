@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Check-ins</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<style>
+  :root { --bg:#f4f7f5; --card:#fff; --ink:#17251f; --dim:#5c6f66; --line:#dde7e1; --green:#0b6e4f; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#101613; --card:#1a221e; --ink:#e8f0ec; --dim:#9db3a8; --line:#2b3a33; --green:#49d492; } }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: -apple-system, "Segoe UI", Roboto, sans-serif; background:var(--bg); color:var(--ink); }
+  .wrap { max-width: 760px; margin: 0 auto; padding: 14px 14px 30px; }
+  h1 { font-size: 1.35rem; margin: 4px 0 2px; }
+  h1 .ver { font-size: .62em; opacity: .65; font-weight: normal; }
+  .sub { color: var(--dim); font-size: .88rem; margin: 0 0 12px; }
+  .datenav { display:flex; align-items:center; gap:10px; margin: 10px 0 12px; }
+  .datenav button { border:1px solid var(--line); background:var(--card); color:var(--ink); border-radius:9px; padding:7px 13px; font-size:1rem; cursor:pointer; }
+  .datenav button:disabled { opacity:.35; cursor:default; }
+  .datenav .dlabel { font-weight:700; font-size:1.02rem; }
+  #map { height: 300px; border-radius: 14px; border: 1px solid var(--line); z-index: 0; }
+  .card { display:flex; gap:13px; align-items:center; background:var(--card); border:1px solid var(--line); border-radius:14px; padding:12px 14px; margin-top:10px; cursor:pointer; }
+  .card.sel { outline: 2px solid var(--green); }
+  .gauge { width:64px; flex:0 0 64px; text-align:center; }
+  .gtrack { height:12px; border-radius:6px; background:var(--line); overflow:hidden; }
+  .gfill { height:100%; border-radius:6px; }
+  .gpct { font-size:1.25rem; font-weight:800; margin-top:3px; }
+  .gchg { font-size:.72rem; color:var(--dim); }
+  .cbody { min-width:0; }
+  .cname { font-weight:700; font-size:1.02rem; }
+  .cmeta { color:var(--dim); font-size:.85rem; margin-top:2px; line-height:1.5; }
+  .src { display:inline-block; background:rgba(11,110,79,.14); color:var(--green); border-radius:7px; padding:0 6px; font-size:.78rem; font-weight:700; }
+  .trail { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:12px 14px; margin-top:14px; }
+  .trail h3 { margin:0 0 8px; font-size:1rem; }
+  .trow { display:flex; gap:10px; align-items:center; padding:5px 0; border-top:1px solid var(--line); font-size:.9rem; }
+  .trow:first-of-type { border-top:none; }
+  .empty { color:var(--dim); text-align:center; padding:22px 0 6px; }
+  .dotlbl { background:rgba(255,255,255,.92); border:1px solid #999; border-radius:8px; padding:1px 6px; font-size:11px; font-weight:700; color:#17251f; white-space:nowrap; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>&#x1F4CD; Check-ins <span class="ver">v1.0</span></h1>
+  <p class="sub">Where each phone last reported in while idle &mdash; location + battery, about hourly. Read-only; history is kept, this page browses the last 30 days.</p>
+  <div class="datenav">
+    <button id="prevDay" aria-label="Previous day">&lsaquo;</button>
+    <span class="dlabel" id="dlabel">&hellip;</span>
+    <button id="nextDay" aria-label="Next day">&rsaquo;</button>
+  </div>
+  <div id="map"></div>
+  <div id="cards"></div>
+  <div id="trail"></div>
+</div>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+'use strict';
+var CHK_URL = 'https://bus-live-tracker-db0e1-default-rtdb.firebaseio.com' + '/' + 'pos-4688de3309369eb335b245d1' + '/checkins';
+var dayOffset = 0; // 0 = today (Toronto), back to -29
+var dayData = {};  // tag -> [records sorted by ts]
+var selectedTag = null;
+var map = null, markers = [], trailLayer = null;
+
+function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+function torontoKey(d) {
+  var y, m, dd;
+  new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Toronto', year: 'numeric', month: '2-digit', day: '2-digit' })
+    .formatToParts(d).forEach(function (p) {
+      if (p.type === 'year') y = p.value; if (p.type === 'month') m = p.value; if (p.type === 'day') dd = p.value;
+    });
+  return y + '-' + m + '-' + dd;
+}
+function selectedKey() {
+  // Anchor at Toronto noon today, then step whole days.
+  var anchor = new Date(torontoKey(new Date()) + 'T12:00:00Z');
+  anchor.setUTCDate(anchor.getUTCDate() + dayOffset);
+  return torontoKey(anchor);
+}
+function fmtTime(ts) {
+  return new Date(ts).toLocaleTimeString('en-CA', { timeZone: 'America/Toronto', hour: 'numeric', minute: '2-digit' });
+}
+function fmtDayLabel(key) {
+  var d = new Date(key + 'T12:00:00Z');
+  var s = d.toLocaleDateString('en-CA', { timeZone: 'America/Toronto', weekday: 'short', month: 'short', day: 'numeric' });
+  if (dayOffset === 0) s += ' (today)';
+  if (dayOffset === -1) s += ' (yesterday)';
+  return s;
+}
+function ageText(ts) {
+  var mins = Math.max(0, Math.round((Date.now() - ts) / 60000));
+  if (mins < 1) return 'just now';
+  if (mins < 60) return mins + ' min ago';
+  var h = Math.floor(mins / 60);
+  return h + ' h ' + (mins % 60) + ' min ago';
+}
+function battColor(p) { return p > 50 ? '#2e9e63' : (p >= 20 ? '#d9930d' : '#c0392b'); }
+function appName(rec) { return rec.app === 'stc' ? 'St Cecilia' : (rec.app === 'bus' ? 'Bus' : ''); }
+
+function getJSON(url) {
+  return fetch(url).then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; });
+}
+function load() {
+  var key = selectedKey();
+  document.getElementById('dlabel').textContent = fmtDayLabel(key);
+  document.getElementById('prevDay').disabled = dayOffset <= -29;
+  document.getElementById('nextDay').disabled = dayOffset >= 0;
+  getJSON(CHK_URL + '.json?shallow=true').then(function (tagsObj) {
+    var tags = tagsObj ? Object.keys(tagsObj) : [];
+    if (!tags.length) { dayData = {}; render(); return; }
+    var jobs = tags.map(function (tag) {
+      return getJSON(CHK_URL + '/' + encodeURIComponent(tag) + '/' + key + '.json').then(function (recs) {
+        if (!recs) return;
+        var arr = Object.keys(recs).map(function (k) { return recs[k]; })
+          .filter(function (r) { return r && typeof r.lat === 'number' && typeof r.lng === 'number'; })
+          .sort(function (a, b) { return a.ts - b.ts; });
+        if (arr.length) dayData[tag] = arr;
+      });
+    });
+    dayData = {};
+    Promise.all(jobs).then(render);
+  });
+}
+function latestOf(tag) { var a = dayData[tag]; return a && a.length ? a[a.length - 1] : null; }
+
+function render() {
+  var tags = Object.keys(dayData).sort(function (a, b) { return latestOf(b).ts - latestOf(a).ts; });
+  if (selectedTag && !dayData[selectedTag]) selectedTag = null;
+  if (!selectedTag && tags.length) selectedTag = tags[0];
+  // Map
+  if (!map) {
+    map = L.map('map').setView([43.497, -79.72], 14);
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '&copy; OpenStreetMap' }).addTo(map);
+  }
+  markers.forEach(function (m) { map.removeLayer(m); });
+  markers = [];
+  if (trailLayer) { map.removeLayer(trailLayer); trailLayer = null; }
+  var pts = [];
+  tags.forEach(function (tag) {
+    var rec = latestOf(tag);
+    var isSel = tag === selectedTag;
+    var icon = L.divIcon({ className: '', iconSize: null,
+      html: '<div style="text-align:center"><div style="width:' + (isSel ? 16 : 12) + 'px;height:' + (isSel ? 16 : 12) + 'px;border-radius:50%;background:' + (isSel ? '#0b6e4f' : '#3a7bd5') + ';border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.4);margin:0 auto"></div>'
+        + '<div class="dotlbl">' + esc(rec.label || tag) + (typeof rec.batt === 'number' ? ' &middot; ' + rec.batt + '%' : '') + '</div></div>',
+      iconAnchor: [30, 8] });
+    var mk = L.marker([rec.lat, rec.lng], { icon: icon }).addTo(map);
+    mk.on('click', function () { selectedTag = tag; render(); });
+    markers.push(mk);
+    pts.push([rec.lat, rec.lng]);
+  });
+  if (selectedTag && dayData[selectedTag]) {
+    var small = [];
+    dayData[selectedTag].forEach(function (r) {
+      small.push(L.circleMarker([r.lat, r.lng], { radius: 3, color: '#0b6e4f', opacity: .45, fillOpacity: .45 }).addTo(map));
+      markers.push(small[small.length - 1]);
+    });
+    if (dayData[selectedTag].length > 1) {
+      trailLayer = L.polyline(dayData[selectedTag].map(function (r) { return [r.lat, r.lng]; }), { color: '#0b6e4f', weight: 2, opacity: .4, dashArray: '4 5' }).addTo(map);
+    }
+  }
+  if (pts.length) map.fitBounds(pts, { padding: [28, 28], maxZoom: 15 });
+  // Cards
+  var cards = document.getElementById('cards');
+  if (!tags.length) {
+    cards.innerHTML = '<div class="empty">No check-ins on this day yet.</div>';
+  } else {
+    cards.innerHTML = tags.map(function (tag) {
+      var rec = latestOf(tag);
+      var gauge = typeof rec.batt === 'number'
+        ? '<div class="gauge"><div class="gtrack"><div class="gfill" style="width:' + rec.batt + '%;background:' + battColor(rec.batt) + '"></div></div>'
+          + '<div class="gpct" style="color:' + battColor(rec.batt) + '">' + rec.batt + '%</div>'
+          + '<div class="gchg">' + (rec.chg ? '&#x26A1; charging' : 'not charging') + '</div></div>'
+        : '<div class="gauge"><div class="gpct">&ndash;</div><div class="gchg">battery ?</div></div>';
+      return '<div class="card' + (tag === selectedTag ? ' sel' : '') + '" data-tag="' + esc(tag) + '">' + gauge
+        + '<div class="cbody"><div class="cname">' + esc(rec.label || '(no label)') + '</div>'
+        + '<div class="cmeta">' + esc(appName(rec)) + ' &middot; [' + esc(tag) + ']<br>'
+        + 'Last check-in ' + fmtTime(rec.ts) + ' &middot; ' + ageText(rec.ts) + ' &middot; <span class="src">' + esc(rec.src || '?') + '</span>'
+        + (typeof rec.acc === 'number' ? ' &middot; &plusmn;' + Math.round(rec.acc) + ' m' : '')
+        + '<br>' + dayData[tag].length + ' check-in' + (dayData[tag].length === 1 ? '' : 's') + ' this day</div></div></div>';
+    }).join('');
+    Array.prototype.forEach.call(cards.querySelectorAll('.card'), function (el) {
+      el.addEventListener('click', function () { selectedTag = el.getAttribute('data-tag'); render(); });
+    });
+  }
+  // Trail
+  var trail = document.getElementById('trail');
+  if (selectedTag && dayData[selectedTag]) {
+    var rows = dayData[selectedTag].slice().reverse().map(function (r) {
+      return '<div class="trow"><span style="min-width:74px;font-weight:700">' + fmtTime(r.ts) + '</span>'
+        + '<span class="src">' + esc(r.src || '?') + '</span>'
+        + '<span>' + (typeof r.batt === 'number' ? '&#x1F50B; ' + r.batt + '%' + (r.chg ? ' &#x26A1;' : '') : '') + '</span>'
+        + '<span style="color:var(--dim)">' + (typeof r.acc === 'number' ? '&plusmn;' + Math.round(r.acc) + ' m' : '') + '</span></div>';
+    }).join('');
+    var sel = latestOf(selectedTag);
+    trail.innerHTML = '<div class="trail"><h3>' + esc(sel.label || selectedTag) + ' &mdash; day trail</h3>' + rows + '</div>';
+  } else {
+    trail.innerHTML = '';
+  }
+}
+document.getElementById('prevDay').addEventListener('click', function () { if (dayOffset > -29) { dayOffset--; load(); } });
+document.getElementById('nextDay').addEventListener('click', function () { if (dayOffset < 0) { dayOffset++; load(); } });
+load();
+setInterval(function () { if (dayOffset === 0) load(); }, 60000);
+</script>
+</body>
+</html>
