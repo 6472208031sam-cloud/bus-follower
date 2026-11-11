@@ -66,6 +66,12 @@
   .devrow input[type=checkbox] { width:18px; height:18px; accent-color:var(--acc); flex:none; }
   .devdot { width:14px; height:14px; border-radius:50%; flex:none; }
   .devhint { color:var(--mut); font-size:.85rem; padding:6px 0; }
+  .tagrow { display:block; padding:8px 0 6px; }
+  .taglabel { font-size:.9rem; line-height:1.35; }
+  .tagid { font-family:monospace; font-size:11.5px; word-break:break-all; background:#12241a; border:1px solid #223129; border-radius:6px; padding:5px 7px; margin:6px 0; opacity:.92; }
+  .tagform { display:flex; gap:6px; }
+  .tagform input { flex:1; min-width:0; }
+  .taghint { font-size:11.5px; opacity:.65; margin-top:5px; line-height:1.35; }
   .devbuslbl { background:rgba(0,0,0,.7); color:#fff; font-size:11px; font-weight:800; padding:1px 7px; border-radius:10px; text-align:center; white-space:nowrap; margin-top:2px; }
   .waitlbl { background:#b45309; color:#fff; font-weight:700; font-size:12px; padding:5px 16px; border-radius:18px; text-align:center; white-space:nowrap; box-shadow:0 2px 6px rgba(0,0,0,.35); }
   .gotofflbl { background:#475569; color:#fff; font-weight:700; font-size:12px; padding:5px 16px; border-radius:18px; text-align:center; white-space:nowrap; box-shadow:0 2px 6px rgba(0,0,0,.35); }
@@ -80,7 +86,7 @@
 </head>
 <body>
 <header>
-  <h1>&#x1F68C; Bus Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v6.45</span></h1>
+  <h1>&#x1F68C; Bus Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v6.46</span></h1>
   <div class="seg">
     <button id="btnAM" class="on">AM</button>
     <button id="btnPM">PM</button>
@@ -130,10 +136,11 @@
   <h2>Maintenance</h2>
   <div class="devfilter">
     <label class="devrow"><input type="checkbox" id="heartbeatToggle" checked /> <b>Heartbeat</b> — this page counts itself as watching (shown on the test-alerts page)</label>
-    <div class="devrow"><b>Watcher name</b> &mdash; appended to this page's heartbeat ID (one shared name for both follower pages in this browser)
-      <div id="tagIdLine" style="font-family:monospace;font-size:11.5px;word-break:break-all;opacity:0.85;margin:4px 0 6px;">W1|&hellip;</div>
-      <div class="row" style="gap:6px;margin:0;"><input type="text" id="tagNameBox" value="blank" autocomplete="off" autocapitalize="off" spellcheck="false" style="flex:1;" /> <button class="act ghost" id="tagSaveBtn" type="button">Save</button></div>
-      <div style="font-size:11.5px;opacity:0.7;margin-top:4px;">Single word, letters / digits / hyphens, max 16. Save with the box empty resets to &ldquo;blank&rdquo;.</div>
+    <div class="tagrow">
+      <div class="taglabel"><b>Watcher name</b> &mdash; appended to this page's heartbeat ID (one shared name for both follower pages in this browser)</div>
+      <div class="tagid" id="tagIdLine">W1|&hellip;</div>
+      <div class="tagform"><input type="text" id="tagNameBox" value="blank" autocomplete="off" autocapitalize="off" spellcheck="false" /> <button class="act ghost" id="tagSaveBtn" type="button">Save</button></div>
+      <div class="taghint">Single word, letters / digits / hyphens, max 16. Save with the box empty resets to &ldquo;blank&rdquo;.</div>
     </div>
     <label class="devrow"><input type="checkbox" id="posTestToggle" checked /> <b>Position test</b> — raw live dot from positions alone (testing only; on by default for now)</label>
     <label class="devrow"><input type="checkbox" id="showTestsToggle" /> <b>Show test alerts</b> — 🔔 TEST events apply and appear in the log (off = recorded but hidden, no effect)</label>
@@ -1046,7 +1053,7 @@ if (HARDCODED_TOPIC) {
 }
 // Re-backfill when tab becomes visible again (mobile browsers suspend SSE in background tabs)
 
-/* ===== Live Tracker (v6.45) =====
+/* ===== Live Tracker (v6.46) =====
    Position layer: subscribes to the Firebase Realtime Database
    position records (REST/SSE, SDK-free) and glides the bus marker
    along the route line between stop events. SEPARATE from the event
@@ -1162,7 +1169,7 @@ var posPillAgg = null; // {html, w, h} for the aggregate key, or null
 var posPillDev = {}; // dev -> {html, w, h}
 function posPillFor(key) { return key === '__agg' ? posPillAgg : (posPillDev[key] || null); }
 function posPillKey(key) { var p = posPillFor(key); return p ? p.html : ''; }
-// (v6.45) Speed chip + bus icon: the driven stack gains a
+// (v6.46) Speed chip + bus icon: the driven stack gains a
 // speed chip BELOW the centre (writer-reported spd on the position
 // record; shown always while the dot is live, hidden when stale)
 // and, while the device is on the bus, a bare bus glyph in place
@@ -1551,7 +1558,7 @@ if (showTestsEl) {
       return fnv(parts.join('|'));
     }
     var FP = fingerprint();
-    /* Watcher name tag (v6.45): one shared tag per browser
+    /* Watcher name tag (v6.46): one shared tag per browser
        (localStorage follower_tag_name), appended to every heartbeat
        as -<tag>; defaults to "blank" until a name is set. */
     var TAG_KEY = 'follower_tag_name';
@@ -1589,7 +1596,7 @@ if (showTestsEl) {
     var tagIdEl = document.getElementById('tagIdLine');
     var tagSaveBtn = document.getElementById('tagSaveBtn');
     function tagRefresh(forceBox) {
-      if (tagIdEl) tagIdEl.textContent = heartbeatBody();
+      if (tagIdEl) tagIdEl.innerHTML = 'W1|' + wid + '|' + FP + '<b>-' + readTag() + '</b>';
       if (tagBox && (forceBox || document.activeElement !== tagBox)) tagBox.value = readTag();
     }
     if (tagSaveBtn && tagBox) {
