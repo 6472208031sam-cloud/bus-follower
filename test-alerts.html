@@ -32,30 +32,36 @@
   .watchnames .who { display: flex; align-items: center; gap: 6px; }
   .watchnames .livedot { width: 7px; height: 7px; border-radius: 50%; background: #22c55e; display: inline-block; flex: none; }
   .watchnames .wrow.hist { opacity: .55; }
+  .chanline { font-size: .82rem; opacity: .85; margin: 8px 0 2px; }
+  .chanline code { background: #222; color: #eee; padding: .15rem .5rem; border-radius: 4px; user-select: all; word-break: break-all; }
+  .cardchan { border-top: 1px solid rgba(180,83,9,.35); padding-top: 6px; }
 </style>
 </head>
 <body>
-<h1>ntfy Alert Test <span style="font-size:0.6em;opacity:0.7;font-weight:normal;">v2.20</span></h1>
-<p style="font-size:0.9rem;opacity:0.85;">Channel: <code id="chanName" style="background:#222;padding:0.15rem 0.5rem;border-radius:4px;user-select:all;"></code></p>
-<p>Sends <strong>TEST</strong> alerts to the channel saved in the Bus Follower page.</p>
+<h1>ntfy Alert Test <span style="font-size:0.6em;opacity:0.7;font-weight:normal;">v2.21</span></h1>
 
 <h2>Watching now</h2>
 <div class="row" style="gap:10px;">
-  <div class="watchcard"><div class="watchname">BUS <span class="cdot err" id="watchBusDot"></span></div><div class="watchnum" id="watchBus">&ndash;</div><div class="watchsub" id="watchBusSub">connecting&hellip;</div><div class="watchsub2" id="watchBusDay">&ndash;</div><div class="watchnames" id="watchBusNames"></div></div>
-  <div class="watchcard"><div class="watchname">ST CECILIA <span class="cdot err" id="watchStcDot"></span></div><div class="watchnum" id="watchStc">&ndash;</div><div class="watchsub" id="watchStcSub">connecting&hellip;</div><div class="watchsub2" id="watchStcDay">&ndash;</div><div class="watchnames" id="watchStcNames"></div></div>
+  <div class="watchcard"><div class="watchname">BUS <span class="cdot err" id="watchBusDot"></span></div><div class="watchnum" id="watchBus">&ndash;</div><div class="watchsub" id="watchBusSub">connecting&hellip;</div><div class="watchsub2" id="watchBusDay">&ndash;</div><div class="watchnames" id="watchBusNames"></div><div class="chanline cardchan">Channel: <code class="chanBus"></code></div></div>
+  <div class="watchcard"><div class="watchname">ST CECILIA <span class="cdot err" id="watchStcDot"></span></div><div class="watchnum" id="watchStc">&ndash;</div><div class="watchsub" id="watchStcSub">connecting&hellip;</div><div class="watchsub2" id="watchStcDay">&ndash;</div><div class="watchnames" id="watchStcNames"></div><div class="chanline cardchan">Channel: <code class="chanStc"></code></div></div>
 </div>
 <p style="font-size:0.85rem;opacity:0.8;">Approximate &mdash; counts open follower pages by anonymous device ID (stored ID + fingerprint). Includes any follower page you have open yourself. Parents see nothing; the follower pages show no count.</p>
 
 <h2>Connectivity Test</h2>
 <p>Tap to verify your phone can reach ntfy.sh:</p>
+<div class="chanline">Bus channel: <code class="chanBus"></code></div>
 <div class="row">
   <button onclick="window.open('https://ntfy.sh/' + TOPIC, '_blank')">History — ntfy app</button>
-  <button onclick="window.open('https://ntfy.sh/' + ST_TOPIC, '_blank')">History — ntfy app — St Cecilia</button>
   <button onclick="window.open('https://ntfy.sh/' + TOPIC + '/sse', '_blank')">Test Live Stream</button>
+</div>
+<div class="chanline">St Cecilia channel: <code class="chanStc"></code></div>
+<div class="row">
+  <button onclick="window.open('https://ntfy.sh/' + ST_TOPIC, '_blank')">History — ntfy app — St Cecilia</button>
 </div>
 <p style="font-size:0.85rem;opacity:0.8;">History opens the channel in the ntfy web app. Live stream will hang waiting — that's normal if it connects. If either fails, your network is blocking ntfy.sh.</p>
 
 <h2>Clear channel</h2>
+<div class="chanline">Clears the Bus channel: <code class="chanBus"></code></div>
 <div class="row">
   <button id="clearBtn" onclick="clearChannel()" style="background:#a33;">Clear Today's Alerts</button>
 </div>
@@ -63,6 +69,7 @@
 <div id="clearStatus" style="font-size:0.85rem;margin-top:0.4rem;"></div>
 
 <h2>Bulk send</h2>
+<div class="chanline">Channel: <code class="chanBus"></code></div>
 <div class="row">
   <button id="allBtn" onclick="runAll()">Send All (AM + PM)</button>
   <button id="amBtn" onclick="runAM()">Send All AM</button>
@@ -70,19 +77,22 @@
 </div>
 
 <h2>Individual stops — AM</h2>
+<div class="chanline">Channel: <code class="chanBus"></code></div>
 <div id="amList"></div>
 
 <h2>Individual stops — PM</h2>
+<div class="chanline">Channel: <code class="chanBus"></code></div>
 <div id="pmList"></div>
 
 <h2>Individual stops — St Cecilia AM</h2>
-<p style="font-size:0.85rem;opacity:0.8;">Channel: <code>00-St-Celia-gh45lt-Stc</code></p>
+<div class="chanline">Channel: <code class="chanStc"></code></div>
 <div class="row" style="margin-bottom:0.5rem;">
   <button onclick="runSTAM()">Send All St Cecilia AM</button>
 </div>
 <div id="stAMList"></div>
 
 <h2>Individual stops — St Cecilia PM</h2>
+<div class="chanline">Channel: <code class="chanStc"></code></div>
 <div class="row" style="margin-bottom:0.5rem;">
   <button onclick="runSTPM()">Send All St Cecilia PM</button>
 </div>
@@ -93,10 +103,13 @@
 
 <script>
 var TOPIC = '00-Bus-107-135-gh45lt';
-document.getElementById('chanName').textContent = TOPIC;
 var AM_STOPS = [[1, "ON WILLIAM CUTMORE AVE AT EVEREST CRES (NORTH ENTRANCE) AT PARK"], [2, "ON FORD STRATHY CRES - OPPOSITE 1411 AT BENCHES"], [3, "ON MEADOWRIDGE DR AT WHEAT BOOM DR (N/W CORNER)"], [4, "ON JOHN MCKAY BLVD - NORTH OF ANSON GATE AT WALKWAY"], [5, "ON THRESHING MILL BLVD AT MEADOW MARSH CRES (N/E CORNER)"], [6, "ON WHEAT BOOM DR - OPPOSITE 434 WHEAT BOOM DR AT PARK"], [7, "ON POSTRIDGE DR AT FAIRGATE WAY (N/W CORNER) - TRANSIT STYLE STOP"], [8, "ON CRIMSON OAK TRAIL - BETWEEN NICHOLS & CEDAR"], [9, "ON PONDVIEW PL - OPPOSITE 495 PONDVIEW PL AT PARK SIGN"], [10, "ON CORONATION DR AT NORTH RIDGE TRAIL (S/E CORNER) AT PARK"], [11, "ON CRAIGLEITH RD - OPPOSITE SYLVIA DR AT PARK (SOUTH SIDE)"], [12, "ON CRAIGLEITH RD AT MEADOWRIDGE DR (S/W CORNER)"], [13, "SCHOOL: ST MARGUERITE D'YOUVILLE CES - 1359 BAYSHIRE DR - BUS LOADING ZONE"]];
 var PM_STOPS = [["S", 13, "SCHOOL: ST MARGUERITE D'YOUVILLE CES - 1359 BAYSHIRE DR - BUS LOADING ZONE"], ["0", 0, "STOP 0"], ["01", 0, "STOP 01 - BIG TASTE"], ["02", 0, "STOP 02 - 8TH LINE"], ["A", 9, "ON PONDVIEW PL - OPPOSITE 495 PONDVIEW PL AT PARK SIGN"], ["B", 8, "ON CRIMSON OAK TRAIL - BETWEEN NICHOLS & CEDAR"], ["C", 10, "ON CORONATION DR AT NORTH RIDGE TRAIL (S/E CORNER) AT PARK"], ["D", 11, "ON CRAIGLEITH RD - OPPOSITE SYLVIA DR AT PARK (SOUTH SIDE)"], ["E", 12, "ON CRAIGLEITH RD AT MEADOWRIDGE DR (S/W CORNER)"], ["F", 1, "ON WILLIAM CUTMORE AVE AT EVEREST CRES (NORTH ENTRANCE) AT PARK"], ["G", 2, "ON FORD STRATHY CRES - OPPOSITE 1411 AT BENCHES"], ["H", 3, "ON MEADOWRIDGE DR AT WHEAT BOOM DR (N/W CORNER)"], ["I", 4, "ON JOHN MCKAY BLVD - NORTH OF ANSON GATE AT WALKWAY"], ["J", 5, "ON THRESHING MILL BLVD AT MEADOW MARSH CRES (N/E CORNER)"], ["K", 6, "ON WHEAT BOOM DR - OPPOSITE 434 WHEAT BOOM DR AT PARK"], ["L", 7, "ON POSTRIDGE DR AT FAIRGATE WAY (N/W CORNER) - TRANSIT STYLE STOP"]];
 var ST_TOPIC = '00-St-Celia-gh45lt-Stc';
+// v2.21: every section shows its own channel chip, filled here from
+// the two constants (single source — never retyped in the markup).
+document.querySelectorAll('.chanBus').forEach(function (el) { el.textContent = TOPIC; });
+document.querySelectorAll('.chanStc').forEach(function (el) { el.textContent = ST_TOPIC; });
 var ST_AM_STOPS = [["1", "Mia"], ["2", "Walking"], ["3", "En Route"], ["4", "Emma"], ["5", "Natalia"], ["6", "Threshing Mills"], ["7", "William Rose"], ["8", "Buttonbush"], ["9", "St. Cecilia"]];
 var ST_PM_STOPS = [["A", "9", "St. Cecilia"], ["B", "8", "Buttonbush"], ["C", "7", "William Rose"], ["D", "6", "Threshing Mills"], ["E", "5", "Natalia"], ["F", "4", "Emma"], ["G", "3", "En Route"], ["H", "2", "Walking"], ["I", "1", "Mia"]];
 
@@ -319,6 +332,9 @@ function clearChannel() {
    listens: seed the last ~4 min by poll, subscribe live, and count
    composite IDs heard within 3 min — aged by each message's own
    ntfy timestamp, never by receipt time. This page never pings.
+   v2.21: channel moved from the page top into each section
+   (chips filled from TOPIC / ST_TOPIC; the StC AM line's retyped
+   copy is gone).
    v2.20: per-card connection dot (green/red, the WATCH.up state)
    + the names list becomes the day's history (daily records with
    label + last-heard; live rows highlighted from the seen map).
