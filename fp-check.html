@@ -7,60 +7,101 @@
 <style>
   body { font-family: system-ui, sans-serif; margin: 24px; background: #111; color: #eee; }
   h1 { font-size: 22px; }
+  h2 { font-size: 17px; margin: 26px 0 6px; color: #fbbf24; }
   .big { font-size: 30px; font-weight: 700; padding: 18px; border-radius: 12px; margin: 16px 0; text-align: center; }
   .match { background: #14532d; color: #bbf7d0; }
   .nomatch { background: #3f3f46; color: #d4d4d8; }
-  .row { margin: 10px 0; font-size: 17px; }
-  .k { color: #a1a1aa; }
-  code { word-break: break-all; }
+  .bigfp { font-size: 26px; font-weight: 700; letter-spacing: 1px; background: #222; border-radius: 10px; padding: 12px; text-align: center; margin: 10px 0; user-select: all; }
+  .row { margin: 7px 0; font-size: 16px; display: flex; gap: 10px; }
+  .k { color: #a1a1aa; flex: 0 0 11.5em; }
+  .v { flex: 1 1 auto; min-width: 0; }
+  code { word-break: break-all; user-select: all; }
+  .note { color: #a1a1aa; font-size: 14px; }
 </style>
 </head>
 <body>
 <h1>Watcher Check</h1>
-<p>Open this page in each browser. The one that says <b>MATCH</b> is the browser sending the W1 heartbeat every minute.</p>
-<div id="verdict" class="big nomatch">Checking…</div>
-<div class="row"><span class="k">This browser:</span> <span id="who"></span></div>
-<div class="row"><span class="k">Device:</span> <span id="dev"></span></div>
-<div class="row"><span class="k">Stored watcher ID:</span> <code id="wid"></code></div>
-<div class="row"><span class="k">Fingerprint:</span> <code id="fp"></code></div>
-<div class="row"><span class="k">Screen:</span> <span id="scr"></span></div>
-<div class="row"><span class="k">Graphics:</span> <span id="gpu"></span></div>
+<p>Open this page in a browser to see whether <b>that browser</b> is the one sending the W1 watcher heartbeat every minute &mdash; and everything else a web page can see about the browser, with no permission prompts.</p>
+<div id="verdict" class="big nomatch">Checking&hellip;</div>
+
+<h2>Your watcher identity</h2>
+<div class="row"><span class="k">Fingerprint:</span><span class="v"><span class="bigfp" id="fpBig" style="display:block;">-</span></span></div>
+<div class="row"><span class="k">Stored watcher ID:</span><span class="v"><code id="wid"></code></span></div>
+<div class="row"><span class="k">Watcher name tag:</span><span class="v" id="wtag"></span></div>
+<div class="row"><span class="k">This browser:</span><span class="v" id="who"></span></div>
+<div class="row"><span class="k">Device:</span><span class="v" id="dev"></span></div>
+
+<h2>What feeds the fingerprint</h2>
+<p class="note">The fingerprint is a hash of exactly these eight values, in this order. Two browsers match only if every one of them matches.</p>
+<div class="row"><span class="k">1. User agent:</span><span class="v"><code id="inUa"></code></span></div>
+<div class="row"><span class="k">2. Screen:</span><span class="v"><code id="inScreen"></code></span></div>
+<div class="row"><span class="k">3. Timezone:</span><span class="v"><code id="inTz"></code></span></div>
+<div class="row"><span class="k">4. Language:</span><span class="v"><code id="inLang"></code></span></div>
+<div class="row"><span class="k">5. CPU cores:</span><span class="v"><code id="inCores"></code></span></div>
+<div class="row"><span class="k">6. Touch points:</span><span class="v"><code id="inTouch"></code></span></div>
+<div class="row"><span class="k">7. Graphics renderer:</span><span class="v"><code id="inGpu"></code></span></div>
+<div class="row"><span class="k">8. Canvas hash:</span><span class="v"><code id="inCanvas"></code></span></div>
+
+<h2>Everything else this browser shows</h2>
+<div class="row"><span class="k">Platform:</span><span class="v" id="dPlatform"></span></div>
+<div class="row"><span class="k">Vendor:</span><span class="v" id="dVendor"></span></div>
+<div class="row"><span class="k">Languages:</span><span class="v" id="dLangs"></span></div>
+<div class="row"><span class="k">Screen size:</span><span class="v" id="dScrSize"></span></div>
+<div class="row"><span class="k">Screen available:</span><span class="v" id="dScrAvail"></span></div>
+<div class="row"><span class="k">Colour depth:</span><span class="v" id="dScrDepth"></span></div>
+<div class="row"><span class="k">Orientation:</span><span class="v" id="dOrient"></span></div>
+<div class="row"><span class="k">Window size:</span><span class="v" id="dWin"></span></div>
+<div class="row"><span class="k">Pixel ratio:</span><span class="v" id="dDpr"></span></div>
+<div class="row"><span class="k">Device memory:</span><span class="v" id="dMem"></span></div>
+<div class="row"><span class="k">Graphics vendor:</span><span class="v" id="dGpuVendor"></span></div>
+<div class="row"><span class="k">Connection:</span><span class="v" id="dConn"></span></div>
+<div class="row"><span class="k">Cookies enabled:</span><span class="v" id="dCookies"></span></div>
+<div class="row"><span class="k">Do Not Track:</span><span class="v" id="dDnt"></span></div>
+<div class="row"><span class="k">Colour scheme:</span><span class="v" id="dScheme"></span></div>
+<div class="row"><span class="k">Reduced motion:</span><span class="v" id="dMotion"></span></div>
+<div class="row"><span class="k">Online:</span><span class="v" id="dOnline"></span></div>
+<div class="row"><span class="k">Battery:</span><span class="v" id="dBatt">checking&hellip;</span></div>
+<div class="row"><span class="k">Local time:</span><span class="v" id="dTime"></span></div>
+<div class="row"><span class="k">UTC offset:</span><span class="v" id="dOffset"></span></div>
 <script>
 var TARGET_ID = '99f150cf-0319-4111-851d-08f86a80e730';
 var TARGET_FP = 'e5cf4f8c';
-/* fnv + fingerprint copied verbatim from the follower pages (Watching now) */
+/* fnv + fingerprint: the hash maths is copied verbatim from the
+   follower pages (Watching now) - inputs are also returned so the
+   page can show them; the joined string is unchanged. */
 function fnv(str) {
   var h = 0x811c9dc5;
   for (var i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = (h * 0x01000193) >>> 0; }
   return ('0000000' + h.toString(16)).slice(-8);
 }
 function fingerprint() {
-  var parts = [];
-  try { parts.push(navigator.userAgent || ''); } catch (e) { parts.push(''); }
-  try { parts.push(screen.width + 'x' + screen.height + 'x' + screen.colorDepth); } catch (e) { parts.push(''); }
-  try { parts.push(Intl.DateTimeFormat().resolvedOptions().timeZone || ''); } catch (e) { parts.push(''); }
-  try { parts.push(navigator.language || ''); } catch (e) { parts.push(''); }
-  try { parts.push(String(navigator.hardwareConcurrency || '')); } catch (e) { parts.push(''); }
-  try { parts.push(String(navigator.maxTouchPoints || 0)); } catch (e) { parts.push(''); }
-  var renderer = '';
+  var inputs = { ua: '', screen: '', tz: '', lang: '', cores: '', touch: '', renderer: '', canvas: '' };
+  var vendor = '';
+  try { inputs.ua = navigator.userAgent || ''; } catch (e) {}
+  try { inputs.screen = screen.width + 'x' + screen.height + 'x' + screen.colorDepth; } catch (e) {}
+  try { inputs.tz = Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch (e) {}
+  try { inputs.lang = navigator.language || ''; } catch (e) {}
+  try { inputs.cores = String(navigator.hardwareConcurrency || ''); } catch (e) {}
+  try { inputs.touch = String(navigator.maxTouchPoints || 0); } catch (e) {}
   try {
     var cv = document.createElement('canvas');
     var gl = cv.getContext('webgl') || cv.getContext('experimental-webgl');
     if (gl) {
       var ext = gl.getExtension('WEBGL_debug_renderer_info');
-      renderer = ext ? String(gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) || '') : String(gl.getParameter(gl.RENDERER) || '');
+      inputs.renderer = ext ? String(gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) || '') : String(gl.getParameter(gl.RENDERER) || '');
+      vendor = ext ? String(gl.getParameter(ext.UNMASKED_VENDOR_WEBGL) || '') : String(gl.getParameter(gl.VENDOR) || '');
     }
-    parts.push(renderer);
-  } catch (e) { parts.push(''); }
+  } catch (e) {}
   try {
     var c2 = document.createElement('canvas'); c2.width = 120; c2.height = 30;
     var ctx = c2.getContext('2d');
     ctx.textBaseline = 'top'; ctx.font = '14px Arial';
     ctx.fillStyle = '#f60'; ctx.fillRect(2, 2, 40, 12);
     ctx.fillStyle = '#069'; ctx.fillText('watcher', 4, 4);
-    parts.push(fnv(c2.toDataURL()));
-  } catch (e) { parts.push(''); }
-  return { hash: fnv(parts.join('|')), renderer: renderer };
+    inputs.canvas = fnv(c2.toDataURL());
+  } catch (e) {}
+  var parts = [inputs.ua, inputs.screen, inputs.tz, inputs.lang, inputs.cores, inputs.touch, inputs.renderer, inputs.canvas];
+  return { hash: fnv(parts.join('|')), renderer: inputs.renderer, vendor: vendor, inputs: inputs };
 }
 function browserName(ua) {
   if (/SamsungBrowser/.test(ua)) return 'Samsung Internet';
@@ -82,22 +123,54 @@ function deviceName(ua) {
   if (/Linux/.test(ua)) return 'Linux';
   return 'Unknown';
 }
-var wid = null;
+function set(id, val) { var el = document.getElementById(id); if (el) el.textContent = (val === '' || val === null || val === undefined) ? '(not exposed)' : String(val); }
+var wid = null, wtag = null;
 try { wid = localStorage.getItem('follower_watcher_id'); } catch (e) {}
+try { wtag = localStorage.getItem('follower_tag_name'); } catch (e) {}
 var fp = fingerprint();
-document.getElementById('wid').textContent = wid || '(none stored — this browser has not run a follower page)';
-document.getElementById('fp').textContent = fp.hash;
-document.getElementById('who').textContent = browserName(navigator.userAgent);
-document.getElementById('dev').textContent = deviceName(navigator.userAgent);
-document.getElementById('scr').textContent = screen.width + ' x ' + screen.height;
-document.getElementById('gpu').textContent = fp.renderer || '(not available)';
+set('wid', wid || '(none stored - this browser has not run a follower page)');
+set('wtag', wtag || '(not set - heartbeats go out as -blank)');
+set('fpBig', fp.hash);
+set('who', browserName(navigator.userAgent));
+set('dev', deviceName(navigator.userAgent));
+set('inUa', fp.inputs.ua); set('inScreen', fp.inputs.screen); set('inTz', fp.inputs.tz);
+set('inLang', fp.inputs.lang); set('inCores', fp.inputs.cores); set('inTouch', fp.inputs.touch);
+set('inGpu', fp.inputs.renderer); set('inCanvas', fp.inputs.canvas);
+try { set('dPlatform', navigator.platform); } catch (e) { set('dPlatform', ''); }
+try { set('dVendor', navigator.vendor); } catch (e) { set('dVendor', ''); }
+try { set('dLangs', (navigator.languages || []).join(', ') || navigator.language); } catch (e) { set('dLangs', ''); }
+try { set('dScrSize', screen.width + ' x ' + screen.height); } catch (e) { set('dScrSize', ''); }
+try { set('dScrAvail', screen.availWidth + ' x ' + screen.availHeight); } catch (e) { set('dScrAvail', ''); }
+try { set('dScrDepth', screen.colorDepth + '-bit (pixel depth ' + screen.pixelDepth + ')'); } catch (e) { set('dScrDepth', ''); }
+try { set('dOrient', screen.orientation ? screen.orientation.type : ''); } catch (e) { set('dOrient', ''); }
+try { set('dWin', window.innerWidth + ' x ' + window.innerHeight); } catch (e) { set('dWin', ''); }
+try { set('dDpr', window.devicePixelRatio); } catch (e) { set('dDpr', ''); }
+try { set('dMem', navigator.deviceMemory ? ('about ' + navigator.deviceMemory + ' GB') : ''); } catch (e) { set('dMem', ''); }
+set('dGpuVendor', fp.vendor);
+try {
+  var c = navigator.connection;
+  set('dConn', c ? ((c.effectiveType || '?') + ' - about ' + (c.downlink || '?') + ' Mbps, RTT ' + (c.rtt || '?') + ' ms' + (c.saveData ? ', data saver on' : '')) : '');
+} catch (e) { set('dConn', ''); }
+try { set('dCookies', navigator.cookieEnabled ? 'yes' : 'no'); } catch (e) { set('dCookies', ''); }
+try { set('dDnt', (navigator.doNotTrack === '1') ? 'on' : (navigator.doNotTrack === '0' ? 'off' : '')); } catch (e) { set('dDnt', ''); }
+try { set('dScheme', window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'); } catch (e) { set('dScheme', ''); }
+try { set('dMotion', window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'reduced' : 'no preference'); } catch (e) { set('dMotion', ''); }
+try { set('dOnline', navigator.onLine ? 'yes' : 'no'); } catch (e) { set('dOnline', ''); }
+try { set('dTime', new Date().toString()); } catch (e) { set('dTime', ''); }
+try { var off = -new Date().getTimezoneOffset(); set('dOffset', 'UTC' + (off < 0 ? '-' : '+') + Math.abs(off / 60) + 'h'); } catch (e) { set('dOffset', ''); }
+try {
+  if (navigator.getBattery) {
+    navigator.getBattery().then(function (b) { set('dBatt', Math.round(b.level * 100) + '%' + (b.charging ? ' (charging)' : '')); })
+      .catch(function () { set('dBatt', ''); });
+  } else set('dBatt', '');
+} catch (e) { set('dBatt', ''); }
 var v = document.getElementById('verdict');
 if (wid === TARGET_ID) {
   v.className = 'big match';
-  v.textContent = '✅ MATCH — this browser is the watcher';
+  v.textContent = '\u2705 MATCH - this browser is the watcher';
 } else if (fp.hash === TARGET_FP) {
   v.className = 'big match';
-  v.textContent = '🟡 Fingerprint matches, ID differs — same browser/device type, likely the same one';
+  v.textContent = '\uD83D\uDFE1 Fingerprint matches, ID differs - same browser/device type, likely the same one';
 } else {
   v.className = 'big nomatch';
   v.textContent = 'Not this browser';
