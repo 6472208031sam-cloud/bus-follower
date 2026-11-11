@@ -80,7 +80,7 @@
 </head>
 <body>
 <header>
-  <h1>&#x1F68C; Bus Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v6.44</span></h1>
+  <h1>&#x1F68C; Bus Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v6.45</span></h1>
   <div class="seg">
     <button id="btnAM" class="on">AM</button>
     <button id="btnPM">PM</button>
@@ -130,6 +130,11 @@
   <h2>Maintenance</h2>
   <div class="devfilter">
     <label class="devrow"><input type="checkbox" id="heartbeatToggle" checked /> <b>Heartbeat</b> — this page counts itself as watching (shown on the test-alerts page)</label>
+    <div class="devrow"><b>Watcher name</b> &mdash; appended to this page's heartbeat ID (one shared name for both follower pages in this browser)
+      <div id="tagIdLine" style="font-family:monospace;font-size:11.5px;word-break:break-all;opacity:0.85;margin:4px 0 6px;">W1|&hellip;</div>
+      <div class="row" style="gap:6px;margin:0;"><input type="text" id="tagNameBox" value="blank" autocomplete="off" autocapitalize="off" spellcheck="false" style="flex:1;" /> <button class="act ghost" id="tagSaveBtn" type="button">Save</button></div>
+      <div style="font-size:11.5px;opacity:0.7;margin-top:4px;">Single word, letters / digits / hyphens, max 16. Save with the box empty resets to &ldquo;blank&rdquo;.</div>
+    </div>
     <label class="devrow"><input type="checkbox" id="posTestToggle" checked /> <b>Position test</b> — raw live dot from positions alone (testing only; on by default for now)</label>
     <label class="devrow"><input type="checkbox" id="showTestsToggle" /> <b>Show test alerts</b> — 🔔 TEST events apply and appear in the log (off = recorded but hidden, no effect)</label>
     <div class="row"><a class="act ghost" href="test-alerts.html" target="_blank" style="text-decoration:none;display:inline-block;text-align:center;">🔔 Test stop alerts</a></div>
@@ -1041,7 +1046,7 @@ if (HARDCODED_TOPIC) {
 }
 // Re-backfill when tab becomes visible again (mobile browsers suspend SSE in background tabs)
 
-/* ===== Live Tracker (v6.44) =====
+/* ===== Live Tracker (v6.45) =====
    Position layer: subscribes to the Firebase Realtime Database
    position records (REST/SSE, SDK-free) and glides the bus marker
    along the route line between stop events. SEPARATE from the event
@@ -1157,7 +1162,7 @@ var posPillAgg = null; // {html, w, h} for the aggregate key, or null
 var posPillDev = {}; // dev -> {html, w, h}
 function posPillFor(key) { return key === '__agg' ? posPillAgg : (posPillDev[key] || null); }
 function posPillKey(key) { var p = posPillFor(key); return p ? p.html : ''; }
-// (v6.44) Speed chip + bus icon: the driven stack gains a
+// (v6.45) Speed chip + bus icon: the driven stack gains a
 // speed chip BELOW the centre (writer-reported spd on the position
 // record; shown always while the dot is live, hidden when stale)
 // and, while the device is on the bus, a bare bus glyph in place
@@ -1546,11 +1551,25 @@ if (showTestsEl) {
       return fnv(parts.join('|'));
     }
     var FP = fingerprint();
+    /* Watcher name tag (v6.45): one shared tag per browser
+       (localStorage follower_tag_name), appended to every heartbeat
+       as -<tag>; defaults to "blank" until a name is set. */
+    var TAG_KEY = 'follower_tag_name';
+    function cleanTag(s) {
+      var t = String(s == null ? '' : s).replace(/[^A-Za-z0-9-]/g, '').slice(0, 16);
+      return t === '' ? 'blank' : t;
+    }
+    function readTag() {
+      var v = null;
+      try { v = localStorage.getItem(TAG_KEY); } catch (e) {}
+      return cleanTag(v == null ? '' : v);
+    }
+    function heartbeatBody() { return 'W1|' + wid + '|' + FP + '-' + readTag(); }
     function ping() {
       if (document.hidden) return;
       if (!heartbeatOn) return;
       try {
-        fetch('https://ntfy.sh/' + encodeURIComponent(PRES_TOPIC), { method: 'POST', body: 'W1|' + wid + '|' + FP })
+        fetch('https://ntfy.sh/' + encodeURIComponent(PRES_TOPIC), { method: 'POST', body: heartbeatBody() })
           .then(function () {}, function () {});
       } catch (e) {}
     }
@@ -1563,8 +1582,28 @@ if (showTestsEl) {
         if (heartbeatOn) ping();
       });
     }
+    /* Watcher name row (Maintenance): preview + box + Save.
+       CQ1: the ID line refreshes on Save and on every 60 s tick; the
+       box refreshes on a tick only when it is not focused. */
+    var tagBox = document.getElementById('tagNameBox');
+    var tagIdEl = document.getElementById('tagIdLine');
+    var tagSaveBtn = document.getElementById('tagSaveBtn');
+    function tagRefresh(forceBox) {
+      if (tagIdEl) tagIdEl.textContent = heartbeatBody();
+      if (tagBox && (forceBox || document.activeElement !== tagBox)) tagBox.value = readTag();
+    }
+    if (tagSaveBtn && tagBox) {
+      tagSaveBtn.addEventListener('click', function () {
+        var t = cleanTag(tagBox.value);
+        try { localStorage.setItem(TAG_KEY, t); } catch (e) {}
+        tagBox.value = t;
+        tagRefresh(false);
+        ping();
+      });
+    }
+    tagRefresh(true);
     ping();
-    setInterval(ping, 60000);
+    setInterval(function () { ping(); tagRefresh(false); }, 60000);
     document.addEventListener('visibilitychange', function () { if (!document.hidden) ping(); });
   } catch (e) {}
 })();
