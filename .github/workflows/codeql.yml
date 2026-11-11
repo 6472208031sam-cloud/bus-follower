@@ -1,0 +1,39 @@
+name: CodeQL
+
+# CodeQL (JavaScript) over the pages' extracted inline scripts.
+# The extractor runs first and leaves real .js files in the tree, so
+# analysis never depends on CodeQL's HTML extraction. Results land in
+# Security > Code scanning; the repo ruleset requires them on PRs.
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  analyze:
+    name: codeql
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Extract inline scripts
+        run: node ci/extract-inline-js.js
+      - name: Un-ignore extracted dir for the analyzer (ephemeral checkout only)
+        run: '[ -f .gitignore ] && sed -i "\|^ci-extracted/$|d" .gitignore || true'
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: javascript-typescript
+          build-mode: none
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:javascript-typescript"
