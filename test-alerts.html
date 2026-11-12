@@ -35,10 +35,13 @@
   .chanline { font-size: .82rem; opacity: .85; margin: 8px 0 2px; }
   .chanline code { background: #222; color: #eee; padding: .15rem .5rem; border-radius: 4px; user-select: all; word-break: break-all; }
   .cardchan { border-top: 1px solid rgba(180,83,9,.35); padding-top: 6px; }
+  .bcform label { display: block; font-size: .82rem; font-weight: 700; letter-spacing: .05em; margin: 10px 0 2px; opacity: .8; }
+  .bcform select, .bcform input { width: 100%; font-size: 1rem; padding: 10px; border-radius: 8px; border: 1px solid #999; box-sizing: border-box; background: #fff; color: #111; }
+  #bcStatus { font-size: .9rem; margin-top: 8px; min-height: 1.2em; }
 </style>
 </head>
 <body>
-<h1>ntfy Alert Test <span style="font-size:0.6em;opacity:0.7;font-weight:normal;">v2.23</span></h1>
+<h1>ntfy Alert Test <span style="font-size:0.6em;opacity:0.7;font-weight:normal;">v2.24</span></h1>
 
 <h2>Watching now</h2>
 <div class="row" style="gap:10px;">
@@ -47,6 +50,29 @@
 </div>
 <p style="font-size:0.85rem;opacity:0.8;">Approximate &mdash; counts open follower pages by anonymous device ID (stored ID + fingerprint). Includes any follower page you have open yourself. Parents see nothing; the follower pages show no count.</p>
 <p style="font-size:0.85rem;opacity:0.8;">Wondering which of your browsers is a watcher? Open the <a href="fp-check.html">Watcher Check</a> page in that browser &mdash; it shows the browser's watcher ID, fingerprint, and everything else a page can see about it.</p>
+
+<h2>&#x1F4E3; Broadcast</h2>
+<div class="bcform">
+  <label for="bcTarget">SEND TO</label>
+  <select id="bcTarget">
+    <option value="bus">Bus follower</option>
+    <option value="stc">St Cecilia follower</option>
+    <option value="both">Both followers</option>
+  </select>
+  <label for="bcMsg">MESSAGE</label>
+  <select id="bcMsg">
+    <option>No tracking this morning</option>
+    <option>No tracking this afternoon</option>
+    <option>No tracking today</option>
+    <option>PA Day &mdash; no tracking today</option>
+    <option>Snow day &mdash; no tracking today</option>
+    <option>Tracking is on as normal</option>
+    <option value="custom">Custom message&hellip;</option>
+  </select>
+  <input id="bcCustom" type="text" maxlength="60" placeholder="Type a short message&hellip;" style="display:none;">
+  <button id="bcGo" type="button">Go &mdash; send broadcast</button>
+  <div id="bcStatus" aria-live="polite"></div>
+</div>
 
 <h2>Connectivity Test</h2>
 <p>Tap to verify your phone can reach ntfy.sh:</p>
@@ -158,6 +184,30 @@ async function sendOneTo(topic, label, msg) {
   log((ok ? '✓ ' : '✗ ') + label, ok ? 'ok' : 'err');
   return ok;
 }
+/* ===== Broadcast panel (v2.24): posts a megaphone message to the chosen
+   follower channel(s); the follower pages show it as a banner + log line
+   for the rest of the Toronto day. The clear is the exact sentence
+   'Tracking is on as normal', canned or custom. ===== */
+(function () {
+  var target = document.getElementById('bcTarget');
+  var msgSel = document.getElementById('bcMsg');
+  var custom = document.getElementById('bcCustom');
+  var status = document.getElementById('bcStatus');
+  msgSel.addEventListener('change', function () {
+    custom.style.display = msgSel.value === 'custom' ? 'block' : 'none';
+    if (msgSel.value === 'custom') custom.focus();
+  });
+  document.getElementById('bcGo').addEventListener('click', async function () {
+    var text = msgSel.value === 'custom' ? custom.value.trim() : msgSel.value;
+    if (!text) { status.textContent = 'Type a message first \u2014 nothing sent.'; return; }
+    var full = '\uD83D\uDCE3 ' + text;
+    var t = target.value, parts = [];
+    status.textContent = 'Sending\u2026';
+    if (t === 'bus' || t === 'both') parts.push('Bus ' + (await sendOneTo(TOPIC, 'Broadcast to Bus', full) ? '\u2713' : '\u2717'));
+    if (t === 'stc' || t === 'both') parts.push('St Cecilia ' + (await sendOneTo(ST_TOPIC, 'Broadcast to St Cecilia', full) ? '\u2713' : '\u2717'));
+    status.textContent = 'Broadcast: ' + parts.join(' \u00B7 ');
+  });
+})();
 async function runSTAM() {
   setBusy(true);
   log('--- St Cecilia AM stops ---');

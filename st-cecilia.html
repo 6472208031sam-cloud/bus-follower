@@ -80,11 +80,15 @@
   .heroasof { color:rgba(255,255,255,.85); font-size:14.5px; font-weight:600; margin-top:4px; }
   .herocap { color:var(--mut); font-size:.8rem; font-weight:600; margin-top:6px; }
   .phonedot { width:22px; height:22px; border-radius:50%; background:#35d07f; border:3px solid #fff; box-shadow:0 0 0 3px rgba(53,208,127,.4), 0 2px 8px rgba(0,0,0,.5); display:grid; place-items:center; font-size:12px; }
+  .bcast { display:none; background:linear-gradient(135deg,#8f1d12 0%,#c22e1f 55%,#e0492f 100%); color:#fff; padding:14px 16px; font-size:18px; font-weight:800; line-height:1.3; letter-spacing:.2px; border-bottom:3px solid #ff9d8a; box-shadow:0 6px 22px rgba(224,73,47,.55), inset 0 1px 0 rgba(255,255,255,.25); text-shadow:0 1px 3px rgba(0,0,0,.45); animation:bcastpulse 1.6s ease-in-out infinite; }
+  @keyframes bcastpulse { 0%,100% { box-shadow:0 6px 22px rgba(224,73,47,.45), inset 0 1px 0 rgba(255,255,255,.25); } 50% { box-shadow:0 6px 30px rgba(255,90,60,.85), inset 0 1px 0 rgba(255,255,255,.25); } }
+  .bcast .when { display:block; font-size:12px; font-weight:600; opacity:.9; margin-top:3px; }
+  #log .tag.bc { background:#5c1a10; color:#ff9d8a; }
 </style>
 </head>
 <body>
 <header>
-  <h1>&#x1F68C; St Cecilia Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v5.47</span></h1>
+  <h1>&#x1F68C; St Cecilia Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v5.48</span></h1>
   <div class="seg">
     <button id="btnAM" class="on">AM</button>
     <button id="btnPM">PM</button>
@@ -92,6 +96,8 @@
   <div style="font-weight:bold;">St Cecilia Route</div>
   <span id="connDot" title="Disconnected"></span>
 </header>
+
+<div class="bcast" id="bcastBar"><span id="bcastText"></span><span class="when" id="bcastWhen"></span></div>
 
 <div id="map"></div>
 
@@ -773,6 +779,7 @@ function renderRoute() {
   }
   renderStatus();
   try { renderHero(); } catch (e) {}
+  try { renderBroadcast(); } catch (e) {}
 }
 
 
@@ -1028,7 +1035,7 @@ if (HARDCODED_TOPIC) {
 }
 // Re-backfill when tab becomes visible again (mobile browsers suspend SSE in background tabs)
 
-/* ===== Live Tracker (v5.47) =====
+/* ===== Live Tracker (v5.48) =====
    Position layer: subscribes to the Firebase Realtime Database
    position records (REST/SSE, SDK-free) and glides the bus marker
    along the route line between stop events. SEPARATE from the event
@@ -1144,7 +1151,7 @@ var posPillAgg = null; // {html, w, h} for the aggregate key, or null
 var posPillDev = {}; // dev -> {html, w, h}
 function posPillFor(key) { return key === '__agg' ? posPillAgg : (posPillDev[key] || null); }
 function posPillKey(key) { var p = posPillFor(key); return p ? p.html : ''; }
-// (v5.47) Speed chip + bus icon: the driven stack gains a
+// (v5.48) Speed chip + bus icon: the driven stack gains a
 // speed chip BELOW the centre (writer-reported spd on the position
 // record; shown always while the dot is live, hidden when stale)
 // and, while the device is on the bus, a bare bus glyph in place
@@ -1542,7 +1549,7 @@ if (showTestsEl) {
       return fnv(parts.join('|'));
     }
     var FP = fingerprint();
-    /* Watcher name tag (v5.47): one shared tag per browser
+    /* Watcher name tag (v5.48): one shared tag per browser
        (localStorage follower_tag_name), appended to every heartbeat
        as -<tag>; defaults to "blank" until a name is set. */
     var TAG_KEY = 'follower_tag_name';
@@ -1809,6 +1816,21 @@ function disconnect() {
 function handleMessage(raw, opts) {
   var msg = String(raw), isTest = false;
   if (msg.indexOf(BELL + ' TEST:') === 0) { isTest = true; msg = msg.slice((BELL + ' TEST:').length).trim(); }
+  // Broadcast: a plain message starting with the megaphone emoji, sent from
+  // the test-alerts panel. Display-only: recorded on the day record (day.bc),
+  // shown as a banner + log line; never touches stops, progress, Minutes
+  // Behind or positions, and is never test-flagged.
+  if (msg.indexOf('\uD83D\uDCE3') === 0) {
+    var _bcText = msg.slice(2).trim();
+    if (!_bcText) return false;
+    var _bcTime = (opts && opts.time) ? new Date(opts.time) : new Date();
+    var _bcAdded = recordBroadcast(_bcTime.toISOString(), _bcText);
+    if (viewDate) return _bcAdded; // history mode: accumulate silently
+    if (opts && opts.silent) return _bcAdded; // backfill: rendering deferred to the end
+    if (torontoDateKey(_bcTime) !== torontoDateKey(new Date())) return _bcAdded; // previous-day: history only
+    try { renderBroadcast(); rebuildLiveLog(); } catch (e) {}
+    return _bcAdded;
+  }
   // New "My Stop" device-id-first formats (v3.3+):
   //   📱 [A98] waiting at Stop 1: Mia.
   //   📱 [A98] got off at Stop I: Mia.
@@ -2197,6 +2219,53 @@ function updateDateSummary() {
   el.textContent = dateLabel(viewDate) + ' \u2014 AM: ' + amN + ' stop' + (amN === 1 ? '' : 's') +
                    ' \u00B7 PM: ' + pmN + ' stop' + (pmN === 1 ? '' : 's');
 }
+/* ===== Broadcast (panel-sent day notices) =====
+   Stored as a third array on the day record: day.bc = [{time, text}].
+   The clear is DERIVED: a broadcast whose text is exactly the clear
+   sentence leaves no banner; the log keeps every line. */
+var BROADCAST_CLEAR_TEXT = 'Tracking is on as normal';
+function recordBroadcast(timeISO, text) {
+  var when = timeISO ? new Date(timeISO) : new Date();
+  var key = torontoDateKey(when);
+  var h = pruneHistory(loadHistory());
+  var day = h[key] || { am: [], pm: [] };
+  if (!day.bc) day.bc = [];
+  var iso = when.toISOString();
+  for (var i = 0; i < day.bc.length; i++) {
+    if (day.bc[i].time === iso && day.bc[i].text === text) return false;
+  }
+  day.bc.push({ time: iso, text: text });
+  h[key] = day;
+  saveHistory(h);
+  return true;
+}
+function bcStamp(t) {
+  return new Date(t).toLocaleTimeString('en-CA', {
+    timeZone: 'America/Toronto', hour: 'numeric', minute: '2-digit', hour12: true
+  });
+}
+function renderBroadcast() {
+  var bar = document.getElementById('bcastBar');
+  if (!bar) return;
+  if (viewDate) { bar.style.display = 'none'; return; }
+  var day = loadHistory()[torontoDateKey(new Date())];
+  var bc = (day && day.bc) || [];
+  var last = bc.length ? bc[bc.length - 1] : null;
+  if (!last || last.text === BROADCAST_CLEAR_TEXT) { bar.style.display = 'none'; return; }
+  document.getElementById('bcastText').textContent = '\uD83D\uDCE3 ' + last.text;
+  document.getElementById('bcastWhen').textContent = 'Broadcast ' + bcStamp(last.time);
+  bar.style.display = 'block';
+}
+function logEntryBc(item) {
+  var d = document.createElement('div');
+  d.className = 'e';
+  var t = new Date(item.time).toLocaleTimeString('en-CA', {
+    timeZone: 'America/Toronto', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false
+  });
+  d.innerHTML = '<span class="ts">' + esc(t) + '</span>' +
+    '<span class="tag bc">BC</span>' + esc('\uD83D\uDCE3 ' + item.text);
+  return d;
+}
 function logEntryFromEvent(r, ev) {
   var d = document.createElement('div');
   d.className = 'e';
@@ -2229,11 +2298,13 @@ function renderHistoryView() {
     events = events.filter(function (ev) { return hsel.indexOf(ev.dev || DEV_UNKNOWN) !== -1; });
   }
   annotateDelays(route, events);
-  if (!events.length) {
+  var items = events.map(function (ev) { return { ev: ev }; });
+  ((day && day.bc) || []).forEach(function (b) { items.push({ bc: b }); });
+  if (!items.length) {
     log.innerHTML = '<div id="logEmpty">No ' + route + ' events on ' + dateLabel(viewDate) + '.</div>';
   } else {
-    var rev = events.slice().reverse();
-    rev.forEach(function (ev) { if (ev.test && !showTests) return; if (ev.kind === 'start') return; log.appendChild(logEntryFromEvent(route, ev)); });
+    items.sort(function (a, b) { return new Date(b.bc ? b.bc.time : b.ev.time) - new Date(a.bc ? a.bc.time : a.ev.time); });
+    items.forEach(function (item) { if (item.bc) { log.appendChild(logEntryBc(item.bc)); return; } if (item.ev.test && !showTests) return; if (item.ev.kind === 'start') return; log.appendChild(logEntryFromEvent(route, item.ev)); });
   }
   updateDateSummary();
   renderRoute();
@@ -2264,6 +2335,7 @@ function rebuildLiveLog() {
     annotateDelays('PM', day.pm || []);
     (day.am || []).forEach(function (ev) { all.push({ r: 'AM', ev: ev }); });
     (day.pm || []).forEach(function (ev) { all.push({ r: 'PM', ev: ev }); });
+    (day.bc || []).forEach(function (b) { all.push({ bc: b }); });
     (day.st || []).forEach(function (ev) { all.push({ r: 'PM', ev: ev }); });
   }
   if (!all.length) {
@@ -2272,10 +2344,10 @@ function rebuildLiveLog() {
   }
   if (!allDevsSelected()) {
     var fsel = selectedDevices();
-    all = all.filter(function (item) { return fsel.indexOf(item.ev.dev || DEV_UNKNOWN) !== -1; });
+    all = all.filter(function (item) { return item.bc || fsel.indexOf(item.ev.dev || DEV_UNKNOWN) !== -1; });
   }
-  all.sort(function (a, b) { return new Date(b.ev.time) - new Date(a.ev.time); });
-  all.forEach(function (item) { if (item.ev.test && !showTests) return; if (item.ev.kind === 'start') return; log.appendChild(logEntryFromEvent(item.r, item.ev)); });
+  all.sort(function (a, b) { return new Date(b.bc ? b.bc.time : b.ev.time) - new Date(a.bc ? a.bc.time : a.ev.time); });
+  all.forEach(function (item) { if (item.bc) { log.appendChild(logEntryBc(item.bc)); return; } if (item.ev.test && !showTests) return; if (item.ev.kind === 'start') return; log.appendChild(logEntryFromEvent(item.r, item.ev)); });
 }
 // AM/PM toggle must re-render history log when in history mode
 var _origSetRoute = setRoute;
