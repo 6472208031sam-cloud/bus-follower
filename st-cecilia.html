@@ -84,7 +84,7 @@
 </head>
 <body>
 <header>
-  <h1>&#x1F68C; St Cecilia Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v5.46</span></h1>
+  <h1>&#x1F68C; St Cecilia Follower <span id="ver" style="font-size:0.6em;opacity:0.7;font-weight:normal;">v5.47</span></h1>
   <div class="seg">
     <button id="btnAM" class="on">AM</button>
     <button id="btnPM">PM</button>
@@ -1028,7 +1028,7 @@ if (HARDCODED_TOPIC) {
 }
 // Re-backfill when tab becomes visible again (mobile browsers suspend SSE in background tabs)
 
-/* ===== Live Tracker (v5.46) =====
+/* ===== Live Tracker (v5.47) =====
    Position layer: subscribes to the Firebase Realtime Database
    position records (REST/SSE, SDK-free) and glides the bus marker
    along the route line between stop events. SEPARATE from the event
@@ -1144,7 +1144,7 @@ var posPillAgg = null; // {html, w, h} for the aggregate key, or null
 var posPillDev = {}; // dev -> {html, w, h}
 function posPillFor(key) { return key === '__agg' ? posPillAgg : (posPillDev[key] || null); }
 function posPillKey(key) { var p = posPillFor(key); return p ? p.html : ''; }
-// (v5.46) Speed chip + bus icon: the driven stack gains a
+// (v5.47) Speed chip + bus icon: the driven stack gains a
 // speed chip BELOW the centre (writer-reported spd on the position
 // record; shown always while the dot is live, hidden when stale)
 // and, while the device is on the bus, a bare bus glyph in place
@@ -1542,7 +1542,7 @@ if (showTestsEl) {
       return fnv(parts.join('|'));
     }
     var FP = fingerprint();
-    /* Watcher name tag (v5.46): one shared tag per browser
+    /* Watcher name tag (v5.47): one shared tag per browser
        (localStorage follower_tag_name), appended to every heartbeat
        as -<tag>; defaults to "blank" until a name is set. */
     var TAG_KEY = 'follower_tag_name';
@@ -1656,7 +1656,7 @@ function backfillFromNtfy(topic) {
     var re = /🔔 TEST: 🚌 Stop [^<]{1,200}? reached\.|🚌 Stop [^<]{1,200}? reached\.|🚌 Final stop reached:[^<]{1,200}?\.|📱 \\[[AiW][0-9]{2}\\] [^<]{1,200}?\.|🚌 \\[[AiW][0-9]{2}\\] at [^<]{1,200}?\.|⏭ \\[[AiW][0-9]{2}\\] [^<]{1,200}?\./g;
     var m, now = Math.floor(Date.now() / 1000);
     while ((m = re.exec(html)) !== null) {
-      var txt = m[0].replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>');
+      var txt = m[0].replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
       found.push({ event: 'message', message: txt, time: now });
       now--;
     }
