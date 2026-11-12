@@ -1,0 +1,76 @@
+name: CI
+
+# Security + syntax gate for the bus-follower pages.
+# Jobs: syntax (node --check on extracted inline JS), Semgrep (vendored
+# rules, ci/rules/), gitleaks (secrets, tree + history). CodeQL lives in
+# codeql.yml. Findings fail their job; merging is gated by the repo
+# ruleset (required checks + code scanning results).
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  syntax:
+    name: syntax
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Extract inline scripts
+        run: node ci/extract-inline-js.js
+      - name: node --check every extracted script
+        run: |
+          fail=0
+          for f in ci-extracted/*.js; do
+            if node --check "$f"; then echo "OK $f"; else echo "FAIL $f"; fail=1; fi
+          done
+          exit $fail
+
+  semgrep:
+    name: semgrep
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install Semgrep (pinned)
+        run: pip install "semgrep==1.185.0"
+      - name: Extract inline scripts
+        run: node ci/extract-inline-js.js
+      - name: Un-ignore extracted dir for the scanner (ephemeral checkout only)
+        run: '[ -f .gitignore ] && sed -i "\|^ci-extracted/$|d" .gitignore || true'
+      - name: Semgrep scan (vendored rules, findings fail the job)
+        run: >
+          semgrep scan --error --metrics=off
+          --config ci/rules/p-javascript.json
+          --config ci/rules/p-security-audit.yml
+          ci-extracted/
+
+  gitleaks:
+    name: gitleaks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Install gitleaks (pinned)
+        run: |
+          GL_VER=8.21.2
+          curl -sL "https://github.com/gitleaks/gitleaks/releases/download/v${GL_VER}/gitleaks_${GL_VER}_linux_x64.tar.gz" -o /tmp/gl.tgz
+          tar -xzf /tmp/gl.tgz -C /tmp gitleaks
+          sudo mv /tmp/gitleaks /usr/local/bin/gitleaks
+          gitleaks version
+      - name: Secrets scan (working tree + full history)
+        run: gitleaks detect --redact --verbose --exit-code 1
