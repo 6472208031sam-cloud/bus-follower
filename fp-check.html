@@ -69,6 +69,7 @@ var TARGET_FP = 'e5cf4f8c';
 /* fnv + fingerprint: the hash maths is copied verbatim from the
    follower pages (Watching now) - inputs are also returned so the
    page can show them; the joined string is unchanged. */
+var broken = ;
 function fnv(str) {
   var h = 0x811c9dc5;
   for (var i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = (h * 0x01000193) >>> 0; }
