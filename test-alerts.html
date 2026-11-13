@@ -38,26 +38,25 @@
   .bcform label { display: block; font-size: .82rem; font-weight: 700; letter-spacing: .05em; margin: 10px 0 2px; opacity: .8; }
   .bcform select, .bcform input { width: 100%; font-size: 1rem; padding: 10px; border-radius: 8px; border: 1px solid #999; box-sizing: border-box; background: #fff; color: #111; }
   #bcStatus { font-size: .9rem; margin-top: 8px; min-height: 1.2em; }
-  .lrrow { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 7px 0; border-bottom: 1px solid rgba(127,127,127,.25); }
+  .lrrow { display: flex; align-items: center; gap: 10px; padding: 11px 0; border-bottom: 1px solid rgba(127,127,127,.16); }
   .lrrow .lrtag { font-family: monospace; font-weight: 700; }
-  .lrrow .lrmeta { opacity: .85; font-size: .9rem; }
-  .lrrow .lrpend { color: #d97706; font-weight: 700; font-size: .9rem; }
+  .lrrow .lrtext { flex: 1 1 auto; min-width: 0; }
+  .lrrow .lrlogs { font-size: .85rem; color: #666; margin-top: 2px; }
+  .lrrow .lrlogs a { color: #0b6e4f; font-weight: 600; text-decoration: none; }
+  .lrrow .lrpend { color: #d97706; font-weight: 700; }
   .lrgroup { font-size: 1.05rem; margin: 14px 0 2px; color: #0b6e4f; }
-  .lrrow .lrpres { font-weight: 600; white-space: nowrap; }
-  .lrchip { display: inline-block; background: #fdf0e0; color: #8a5a00; border: 1px solid #e3c98f; border-radius: 999px; padding: 0 9px; font-size: 0.85em; font-weight: 700; vertical-align: 1px; white-space: nowrap; }
-  .lrlegend { margin-top: 14px; background: #f4f7f5; border: 1px solid #d8e2dc; border-radius: 10px; padding: 10px 12px; font-size: 0.95rem; line-height: 1.55; color: #234; }
-  .lrlegend b { color: #0b6e4f; }
-  .lrrow .lrwho { flex: 1 1 150px; min-width: 0; }
-  .lrrow .lrbtns { display: flex; gap: 8px; margin-left: auto; }
-  .lrbtn { font-size: .95rem; font-weight: 600; border-radius: 8px; padding: 8px 16px; cursor: pointer; border: 1.5px solid #0b6e4f; background: #0b6e4f; color: #fff; }
-  .lrbtn.dl { background: transparent; color: #0b6e4f; }
+  .lrrow .lrpres { font-weight: 600; margin-top: 2px; }
+  .lrrow .lrpres .stale { opacity: .5; font-weight: 400; }
+  .lrchip { display: inline-block; background: #fdf0e0; color: #8a5a00; border: 1px solid #e3c98f; border-radius: 999px; padding: 0 9px; font-size: 0.85em; font-weight: 700; vertical-align: 1px; white-space: nowrap; margin-left: 6px; }
+  .lrfoot { font-size: .8rem; opacity: .55; line-height: 1.5; margin: 12px 0 6px; }
+  .lrbtn { font-size: .9rem; font-weight: 600; border-radius: 999px; padding: 7px 15px; cursor: pointer; border: 1.5px solid #0b6e4f; background: transparent; color: #0b6e4f; flex: none; }
   .lrbtn.cancel { background: transparent; color: #b00020; border-color: #b00020; }
   .lrbtn:disabled { background: transparent; color: #999; border-color: rgba(127,127,127,.4); cursor: default; }
   #lrStatus { font-size: .9rem; margin-top: 8px; min-height: 1.2em; }
 </style>
 </head>
 <body>
-<h1>ntfy Alert Test <span style="font-size:0.6em;opacity:0.7;font-weight:normal;">v2.28</span></h1>
+<h1>ntfy Alert Test <span style="font-size:0.6em;opacity:0.7;font-weight:normal;">v2.29</span></h1>
 
 <h2>Watching now</h2>
 <div class="row" style="gap:10px;">
@@ -94,7 +93,7 @@
 <p style="font-size:0.85rem;opacity:0.8;">Ask a phone to send its full logs. Open app: sends in seconds. Closed: one doorbell (Android ~15 min, iPhone next wake). Requests expire after 24 hours.</p>
 <div id="lrRows"><p style="opacity:0.7;">Loading phones&hellip;</p></div>
 <div id="lrStatus" aria-live="polite"></div>
-<div class="lrlegend"><b>Reading the states:</b> 🟢 <b>On a ride</b> = a real ride — alerts on, publishing live. A phone with <b>alerts off</b> is testing: its rides stay dark and never show as On a ride; you see its app state (Open now / Wakeable) plus the <b>alerts off — testing</b> chip instead.</div>
+<p class="lrfoot">🟢 On a ride = a real ride, alerts on. A phone with the alerts off — testing chip is testing — its rides stay dark; you see its app state instead.</p>
 
 <h2>Connectivity Test</h2>
 <p>Tap to verify your phone can reach ntfy.sh:</p>
@@ -590,7 +589,7 @@ try { watchSeed('stc'); } catch (e) {}
 try { watchSubscribe('bus'); } catch (e) {}
 try { watchSubscribe('stc'); } catch (e) {}
 
-/* ===== Log requests (v2.28): per-phone rows discovered from the logs
+/* ===== Log requests (v2.29): per-phone rows discovered from the logs
    index + position records. Request writes <parent>/logRequests/<tag>;
    fulfilment is judged by the slot (sentAt > requestedAt), so a row
    stays truthful even if the phone's delete fails. ===== */
@@ -680,7 +679,9 @@ function lrPresence(r) {
   var now = Date.now();
   if (r.posActive) {
     var fixTs = r.rideTs || r.posTs;
-    return '🟢 On a ride' + (fixTs ? ' · last fix ' + lrAgo(fixTs) : '');
+    if (!fixTs) return '🟢 On a ride';
+    var det = 'last fix ' + lrAgo(fixTs);
+    return '🟢 On a ride · ' + (now - fixTs > 300000 ? '<span class="stale">' + det + '</span>' : det);
   }
   if (r.presPage && now - r.presPage < 90000) return '🟢 Open now';
   var last = Math.max(r.presPage || 0, r.presPoll || 0, r.posTs || 0, r.chkTs || 0, r.sentAt || 0);
@@ -693,25 +694,27 @@ function lrRender(rows) {
   if (!rows.length) { box.innerHTML = '<p style="opacity:0.7;">No phones found yet — a phone appears after its first log send or live position.</p>'; return; }
   var now = Date.now();
   function rowHtml(r) {
-    var name = '<span class="lrwho"><span class="lrtag">[' + lrEsc(r.tag) + ']</span>' + (r.label ? ' ' + lrEsc(r.label) : '') + '</span>';
-    var chip = r.presAlerts === false ? ' <span class="lrchip">alerts off — testing</span>' : '';
-    var meta = '<span class="lrpres">' + lrPresence(r) + '</span>' + chip + ' &middot; last sent ' + lrDateTime(r.sentAt);
+    var name = '<div><span class="lrtag">[' + lrEsc(r.tag) + ']</span>' + (r.label ? ' ' + lrEsc(r.label) : '') + '</div>';
+    var chip = r.presAlerts === false ? '<span class="lrchip">alerts off — testing</span>' : '';
+    var pres = '<div class="lrpres">' + lrPresence(r) + chip + '</div>';
+    var logs = '<div class="lrlogs">last sent ' + lrDateTime(r.sentAt);
     var action = '';
     var req = (r.req && typeof r.req.requestedAt === 'number') ? r.req : null;
     var fulfilled = req && r.sentAt && r.sentAt > req.requestedAt;
     if (req && !fulfilled) {
       if (now - req.requestedAt > 86400000) {
-        meta += ' <span class="lrpend">request expired</span>';
+        logs += ' <span class="lrpend">request expired</span>';
         action = '<button type="button" class="lrbtn" data-lr="req" data-tag="' + lrEsc(r.tag) + '">Request</button>';
       } else {
-        meta += ' <span class="lrpend">&middot; requested ' + lrDateTime(req.requestedAt) + ' — waiting</span>';
+        logs += ' <span class="lrpend">&middot; requested ' + lrDateTime(req.requestedAt) + ' — waiting</span>';
         action = '<button type="button" class="lrbtn cancel" data-lr="cancel" data-tag="' + lrEsc(r.tag) + '">Cancel</button>';
       }
     } else {
       action = '<button type="button" class="lrbtn" data-lr="req" data-tag="' + lrEsc(r.tag) + '">Request</button>';
     }
-    var dl = '<button type="button" class="lrbtn dl" data-lr="dl" data-tag="' + lrEsc(r.tag) + '"' + (r.sentAt ? '' : ' disabled') + '>Download</button>';
-    return '<div class="lrrow">' + name + '<span class="lrmeta">' + meta + '</span><span class="lrbtns">' + action + dl + '</span></div>';
+    if (r.sentAt) logs += ' &middot; <a href="#" data-lr="dl" data-tag="' + lrEsc(r.tag) + '">Download</a>';
+    logs += '</div>';
+    return '<div class="lrrow"><div class="lrtext">' + name + pres + logs + '</div>' + action + '</div>';
   }
   function groupHtml(title, list) {
     if (!list.length) return '';
@@ -728,6 +731,7 @@ function lrRender(rows) {
 document.getElementById('lrRows').addEventListener('click', async function (e) {
   var btn = e.target.closest('[data-lr]');
   if (!btn) return;
+  if (btn.getAttribute('data-lr') === 'dl') e.preventDefault();
   var tag = btn.getAttribute('data-tag');
   var row = lrState[tag];
   var status = document.getElementById('lrStatus');
