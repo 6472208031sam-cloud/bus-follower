@@ -44,6 +44,9 @@
   .lrrow .lrpend { color: #d97706; font-weight: 700; font-size: .9rem; }
   .lrgroup { font-size: 1.05rem; margin: 14px 0 2px; color: #0b6e4f; }
   .lrrow .lrpres { font-weight: 600; white-space: nowrap; }
+  .lrchip { display: inline-block; background: #fdf0e0; color: #8a5a00; border: 1px solid #e3c98f; border-radius: 999px; padding: 0 9px; font-size: 0.85em; font-weight: 700; vertical-align: 1px; white-space: nowrap; }
+  .lrlegend { margin-top: 14px; background: #f4f7f5; border: 1px solid #d8e2dc; border-radius: 10px; padding: 10px 12px; font-size: 0.95rem; line-height: 1.55; color: #234; }
+  .lrlegend b { color: #0b6e4f; }
   .lrrow .lrwho { flex: 1 1 150px; min-width: 0; }
   .lrrow .lrbtns { display: flex; gap: 8px; margin-left: auto; }
   .lrbtn { font-size: .95rem; font-weight: 600; border-radius: 8px; padding: 8px 16px; cursor: pointer; border: 1.5px solid #0b6e4f; background: #0b6e4f; color: #fff; }
@@ -54,7 +57,7 @@
 </style>
 </head>
 <body>
-<h1>ntfy Alert Test <span style="font-size:0.6em;opacity:0.7;font-weight:normal;">v2.27</span></h1>
+<h1>ntfy Alert Test <span style="font-size:0.6em;opacity:0.7;font-weight:normal;">v2.28</span></h1>
 
 <h2>Watching now</h2>
 <div class="row" style="gap:10px;">
@@ -91,6 +94,7 @@
 <p style="font-size:0.85rem;opacity:0.8;">Ask a phone to send its full logs. Open app: sends in seconds. Closed: one doorbell (Android ~15 min, iPhone next wake). Requests expire after 24 hours.</p>
 <div id="lrRows"><p style="opacity:0.7;">Loading phones&hellip;</p></div>
 <div id="lrStatus" aria-live="polite"></div>
+<div class="lrlegend"><b>Reading the states:</b> 🟢 <b>On a ride</b> = a real ride — alerts on, publishing live. A phone with <b>alerts off</b> is testing: its rides stay dark and never show as On a ride; you see its app state (Open now / Wakeable) plus the <b>alerts off — testing</b> chip instead.</div>
 
 <h2>Connectivity Test</h2>
 <p>Tap to verify your phone can reach ntfy.sh:</p>
@@ -586,7 +590,7 @@ try { watchSeed('stc'); } catch (e) {}
 try { watchSubscribe('bus'); } catch (e) {}
 try { watchSubscribe('stc'); } catch (e) {}
 
-/* ===== Log requests (v2.27): per-phone rows discovered from the logs
+/* ===== Log requests (v2.28): per-phone rows discovered from the logs
    index + position records. Request writes <parent>/logRequests/<tag>;
    fulfilment is judged by the slot (sentAt > requestedAt), so a row
    stays truthful even if the phone's delete fails. ===== */
@@ -647,6 +651,7 @@ async function lrRefresh() {
     var pres = (presIdx && presIdx[tag]) || null;
     var presPage = pres && typeof pres.page === 'number' ? pres.page : null;
     var presPoll = pres && typeof pres.poll === 'number' ? pres.poll : null;
+    var presAlerts = pres && typeof pres.alerts === 'boolean' ? pres.alerts : null;
     var chkTs = null;
     if (tag.charAt(0) === 'i') {
       var days = await lrGet(LR_PARENT + '/checkins/' + tag + '.json?shallow=true');
@@ -658,7 +663,7 @@ async function lrRefresh() {
         }
       }
     }
-    rows.push({ tag: tag, app: app, label: label, sentAt: sentAt, req: req, posActive: posActive, rideTs: rideTs, posTs: posTs, presPage: presPage, presPoll: presPoll, chkTs: chkTs });
+    rows.push({ tag: tag, app: app, label: label, sentAt: sentAt, req: req, posActive: posActive, rideTs: rideTs, posTs: posTs, presPage: presPage, presPoll: presPoll, presAlerts: presAlerts, chkTs: chkTs });
   }
   lrState = {};
   rows.forEach(function (r) { lrState[r.tag] = r; });
@@ -689,7 +694,8 @@ function lrRender(rows) {
   var now = Date.now();
   function rowHtml(r) {
     var name = '<span class="lrwho"><span class="lrtag">[' + lrEsc(r.tag) + ']</span>' + (r.label ? ' ' + lrEsc(r.label) : '') + '</span>';
-    var meta = '<span class="lrpres">' + lrPresence(r) + '</span> &middot; last sent ' + lrDateTime(r.sentAt);
+    var chip = r.presAlerts === false ? ' <span class="lrchip">alerts off — testing</span>' : '';
+    var meta = '<span class="lrpres">' + lrPresence(r) + '</span>' + chip + ' &middot; last sent ' + lrDateTime(r.sentAt);
     var action = '';
     var req = (r.req && typeof r.req.requestedAt === 'number') ? r.req : null;
     var fulfilled = req && r.sentAt && r.sentAt > req.requestedAt;
