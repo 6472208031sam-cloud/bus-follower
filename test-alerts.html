@@ -57,7 +57,7 @@
 </style>
 </head>
 <body>
-<h1>ntfy Alert Test <span style="font-size:0.6em;opacity:0.7;font-weight:normal;">v2.30</span></h1>
+<h1>ntfy Alert Test <span style="font-size:0.6em;opacity:0.7;font-weight:normal;">v2.31</span></h1>
 
 <h2>Watching now</h2>
 <div class="row" style="gap:10px;">
@@ -590,7 +590,7 @@ try { watchSeed('stc'); } catch (e) {}
 try { watchSubscribe('bus'); } catch (e) {}
 try { watchSubscribe('stc'); } catch (e) {}
 
-/* ===== Log requests (v2.30): per-phone rows discovered from the logs
+/* ===== Log requests (v2.31): per-phone rows discovered from the logs
    index + position records. Request writes <parent>/logRequests/<tag>;
    fulfilment is judged by the slot (sentAt > requestedAt), so a row
    stays truthful even if the phone's delete fails. ===== */
@@ -648,6 +648,25 @@ async function lrRefresh() {
     var posActive = ownActive === true || othActive === true;
     var rideTs = othActive === true ? othTs : ownTs;
     var posTs = Math.max(ownTs || 0, othTs || 0) || null;
+    // v2.31: a LIVE ride (active + a fix within 5 min) decides the
+    // group and the label. A dual-app phone carries the same tag in
+    // both apps (e.g. A28); whichever app it is actually riding on
+    // wins over the last-logs-send attribution below the line.
+    var nowMs = Date.now();
+    var ownLive = ownActive === true && typeof ownTs === 'number' && nowMs - ownTs <= 300000;
+    var othLive = othActive === true && typeof othTs === 'number' && nowMs - othTs <= 300000;
+    var liveApp = null;
+    if (ownLive && othLive) liveApp = othTs > ownTs ? otherApp : app;
+    else if (othLive) liveApp = otherApp;
+    else if (ownLive) liveApp = app;
+    if (liveApp) {
+      rideTs = liveApp === app ? ownTs : othTs;
+      if (liveApp !== app) {
+        app = liveApp;
+        var livePos = await lrGet(LR_PARENT + '/' + app + '/' + tag + '.json');
+        if (livePos && livePos.label) label = livePos.label;
+      }
+    }
     var pres = (presIdx && presIdx[tag]) || null;
     var presPage = pres && typeof pres.page === 'number' ? pres.page : null;
     var presPoll = pres && typeof pres.poll === 'number' ? pres.poll : null;
