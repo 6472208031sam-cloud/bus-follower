@@ -42,11 +42,18 @@
   .lrrow .lrtag { font-family: monospace; font-weight: 700; }
   .lrrow .lrmeta { opacity: .85; font-size: .9rem; }
   .lrrow .lrpend { color: #d97706; font-weight: 700; font-size: .9rem; }
+  .lrgroup { font-size: 1.05rem; margin: 14px 0 2px; color: #0b6e4f; }
+  .lrrow .lrwho { flex: 1 1 150px; min-width: 0; }
+  .lrrow .lrbtns { display: flex; gap: 8px; margin-left: auto; }
+  .lrbtn { font-size: .95rem; font-weight: 600; border-radius: 8px; padding: 8px 16px; cursor: pointer; border: 1.5px solid #0b6e4f; background: #0b6e4f; color: #fff; }
+  .lrbtn.dl { background: transparent; color: #0b6e4f; }
+  .lrbtn.cancel { background: transparent; color: #b00020; border-color: #b00020; }
+  .lrbtn:disabled { background: transparent; color: #999; border-color: rgba(127,127,127,.4); cursor: default; }
   #lrStatus { font-size: .9rem; margin-top: 8px; min-height: 1.2em; }
 </style>
 </head>
 <body>
-<h1>ntfy Alert Test <span style="font-size:0.6em;opacity:0.7;font-weight:normal;">v2.25</span></h1>
+<h1>ntfy Alert Test <span style="font-size:0.6em;opacity:0.7;font-weight:normal;">v2.26</span></h1>
 
 <h2>Watching now</h2>
 <div class="row" style="gap:10px;">
@@ -80,7 +87,7 @@
 </div>
 
 <h2>Log requests</h2>
-<p style="font-size:0.85rem;opacity:0.8;">Ask a phone to send its full logs to its slot. If the app is open it sends within seconds; if not, the phone rings once (Android ~15 min, iPhone on its next wake) and a tap sends. Requests expire after 24 hours.</p>
+<p style="font-size:0.85rem;opacity:0.8;">Ask a phone to send its full logs. Open app: sends in seconds. Closed: one doorbell (Android ~15 min, iPhone next wake). Requests expire after 24 hours.</p>
 <div id="lrRows"><p style="opacity:0.7;">Loading phones&hellip;</p></div>
 <div id="lrStatus" aria-live="polite"></div>
 
@@ -578,16 +585,21 @@ try { watchSeed('stc'); } catch (e) {}
 try { watchSubscribe('bus'); } catch (e) {}
 try { watchSubscribe('stc'); } catch (e) {}
 
-/* ===== Log requests (v2.25): per-phone rows discovered from the logs
+/* ===== Log requests (v2.26): per-phone rows discovered from the logs
    index + position records. Request writes <parent>/logRequests/<tag>;
    fulfilment is judged by the slot (sentAt > requestedAt), so a row
    stays truthful even if the phone's delete fails. ===== */
 var LR_FB_BASE = 'https://bus-live-tracker-db0e1-default-rtdb.firebaseio.com';
 var LR_PARENT = 'pos-4688de3309369eb335b245d1';
 function lrEsc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
-function lrTime(ms) {
+function lrDateTime(ms) {
   if (!ms) return 'never';
-  try { return new Date(ms).toLocaleTimeString('en-CA', { timeZone: 'America/Toronto', hour: 'numeric', minute: '2-digit' }); } catch (e) { return new Date(ms).toLocaleTimeString(); }
+  try {
+    var parts = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Toronto', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true }).formatToParts(new Date(ms));
+    var p = {};
+    parts.forEach(function (x) { p[x.type] = x.value; });
+    return p.month + ' ' + p.day + ', ' + p.hour + ':' + p.minute + ' ' + (p.dayPeriod || '');
+  } catch (e) { return new Date(ms).toLocaleString(); }
 }
 function lrGet(path) { return fetch(LR_FB_BASE + '/' + path).then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; }); }
 var lrState = {};
@@ -626,23 +638,37 @@ function lrRender(rows) {
   var box = document.getElementById('lrRows');
   if (!rows.length) { box.innerHTML = '<p style="opacity:0.7;">No phones found yet — a phone appears after its first log send or live position.</p>'; return; }
   var now = Date.now();
-  box.innerHTML = rows.map(function (r) {
-    var name = '<span class="lrtag">[' + lrEsc(r.tag) + ']</span>' + (r.label ? ' <span>' + lrEsc(r.label) + '</span>' : '');
-    var meta = '<span class="lrmeta">' + (r.app === 'stc' ? 'St Cecilia' : 'Bus') + ' &middot; last sent ' + lrTime(r.sentAt) + '</span>';
+  function rowHtml(r) {
+    var name = '<span class="lrwho"><span class="lrtag">[' + lrEsc(r.tag) + ']</span>' + (r.label ? ' ' + lrEsc(r.label) : '') + '</span>';
+    var meta = 'last sent ' + lrDateTime(r.sentAt);
     var action = '';
     var req = (r.req && typeof r.req.requestedAt === 'number') ? r.req : null;
     var fulfilled = req && r.sentAt && r.sentAt > req.requestedAt;
     if (req && !fulfilled) {
       if (now - req.requestedAt > 86400000) {
-        action = '<span class="lrpend">request expired</span> <button type="button" data-lr="req" data-tag="' + lrEsc(r.tag) + '">Request</button>';
+        meta += ' <span class="lrpend">request expired</span>';
+        action = '<button type="button" class="lrbtn" data-lr="req" data-tag="' + lrEsc(r.tag) + '">Request</button>';
       } else {
-        action = '<span class="lrpend">requested ' + lrTime(req.requestedAt) + ' — waiting</span> <button type="button" data-lr="cancel" data-tag="' + lrEsc(r.tag) + '">Cancel</button>';
+        meta += ' <span class="lrpend">&middot; requested ' + lrDateTime(req.requestedAt) + ' — waiting</span>';
+        action = '<button type="button" class="lrbtn cancel" data-lr="cancel" data-tag="' + lrEsc(r.tag) + '">Cancel</button>';
       }
     } else {
-      action = '<button type="button" data-lr="req" data-tag="' + lrEsc(r.tag) + '">Request</button>';
+      action = '<button type="button" class="lrbtn" data-lr="req" data-tag="' + lrEsc(r.tag) + '">Request</button>';
     }
-    return '<div class="lrrow">' + name + ' ' + meta + ' ' + action + '</div>';
-  }).join('');
+    var dl = '<button type="button" class="lrbtn dl" data-lr="dl" data-tag="' + lrEsc(r.tag) + '"' + (r.sentAt ? '' : ' disabled') + '>Download</button>';
+    return '<div class="lrrow">' + name + '<span class="lrmeta">' + meta + '</span><span class="lrbtns">' + action + dl + '</span></div>';
+  }
+  function groupHtml(title, list) {
+    if (!list.length) return '';
+    var sorted = list.slice().sort(function (a, b) {
+      var d = (b.sentAt || 0) - (a.sentAt || 0);
+      return d !== 0 ? d : String(a.tag).localeCompare(String(b.tag));
+    });
+    return '<h3 class="lrgroup">' + title + '</h3>' + sorted.map(rowHtml).join('');
+  }
+  var bus = rows.filter(function (r) { return r.app !== 'stc'; });
+  var stc = rows.filter(function (r) { return r.app === 'stc'; });
+  box.innerHTML = groupHtml('Bus', bus) + groupHtml('St Cecilia', stc);
 }
 document.getElementById('lrRows').addEventListener('click', async function (e) {
   var btn = e.target.closest('[data-lr]');
@@ -651,10 +677,28 @@ document.getElementById('lrRows').addEventListener('click', async function (e) {
   var row = lrState[tag];
   var status = document.getElementById('lrStatus');
   btn.disabled = true;
+  if (btn.getAttribute('data-lr') === 'dl') {
+    var rec = await lrGet(LR_PARENT + '/logs/' + tag + '.json');
+    if (rec && rec.text) {
+      var blob = new Blob([rec.text], { type: 'text/plain' });
+      var a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'logs-' + tag + '.txt';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(function () { URL.revokeObjectURL(a.href); }, 5000);
+      status.textContent = 'Saved [' + tag + '] logs — sent ' + lrDateTime(rec.sentAt) + '.';
+    } else {
+      status.textContent = 'Download failed for [' + tag + '] — no logs record found.';
+    }
+    btn.disabled = false;
+    return;
+  }
   if (btn.getAttribute('data-lr') === 'req') {
     var body = { requestedAt: Date.now(), app: row ? row.app : 'bus' };
     var r = await fetch(LR_FB_BASE + '/' + LR_PARENT + '/logRequests/' + tag + '.json', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).catch(function () { return null; });
-    status.textContent = r && r.ok ? 'Requested [' + tag + '] at ' + lrTime(body.requestedAt) + ' — it sends when the app is open, or after one doorbell ring.' : 'Request failed for [' + tag + '] — check connection and try again.';
+    status.textContent = r && r.ok ? 'Requested [' + tag + '] at ' + lrDateTime(body.requestedAt) + ' — it sends when the app is open, or after one doorbell ring.' : 'Request failed for [' + tag + '] — check connection and try again.';
   } else {
     var d = await fetch(LR_FB_BASE + '/' + LR_PARENT + '/logRequests/' + tag + '.json', { method: 'DELETE' }).catch(function () { return null; });
     status.textContent = d && d.ok ? 'Request for [' + tag + '] cancelled.' : 'Cancel failed for [' + tag + '] — check connection and try again.';
