@@ -47,6 +47,7 @@
   .lrgroup { font-size: 1.05rem; margin: 14px 0 2px; color: #0b6e4f; }
   .lrrow .lrpres { font-weight: 600; margin-top: 2px; }
   .lrrow .lrpres .stale { opacity: .5; font-weight: 400; }
+  .lrrow .lrpres .batt { opacity: .55; font-weight: 400; white-space: nowrap; }
   .lrchip { display: inline-block; background: #fdf0e0; color: #8a5a00; border: 1px solid #e3c98f; border-radius: 999px; padding: 0 9px; font-size: 0.85em; font-weight: 700; vertical-align: 1px; white-space: nowrap; margin-left: 6px; }
   .lrfoot { font-size: .8rem; opacity: .55; line-height: 1.5; margin: 12px 0 6px; }
   .lrbtn { font-size: .9rem; font-weight: 600; border-radius: 999px; padding: 7px 15px; cursor: pointer; border: 1.5px solid #0b6e4f; background: transparent; color: #0b6e4f; flex: none; }
@@ -56,7 +57,7 @@
 </style>
 </head>
 <body>
-<h1>ntfy Alert Test <span style="font-size:0.6em;opacity:0.7;font-weight:normal;">v2.29</span></h1>
+<h1>ntfy Alert Test <span style="font-size:0.6em;opacity:0.7;font-weight:normal;">v2.30</span></h1>
 
 <h2>Watching now</h2>
 <div class="row" style="gap:10px;">
@@ -589,7 +590,7 @@ try { watchSeed('stc'); } catch (e) {}
 try { watchSubscribe('bus'); } catch (e) {}
 try { watchSubscribe('stc'); } catch (e) {}
 
-/* ===== Log requests (v2.29): per-phone rows discovered from the logs
+/* ===== Log requests (v2.30): per-phone rows discovered from the logs
    index + position records. Request writes <parent>/logRequests/<tag>;
    fulfilment is judged by the slot (sentAt > requestedAt), so a row
    stays truthful even if the phone's delete fails. ===== */
@@ -651,18 +652,22 @@ async function lrRefresh() {
     var presPage = pres && typeof pres.page === 'number' ? pres.page : null;
     var presPoll = pres && typeof pres.poll === 'number' ? pres.poll : null;
     var presAlerts = pres && typeof pres.alerts === 'boolean' ? pres.alerts : null;
+    var presBatt = pres && pres.batt && typeof pres.batt.pct === 'number' && typeof pres.batt.ts === 'number' ? pres.batt : null;
     var chkTs = null;
+    var chkBatt = null;
     if (tag.charAt(0) === 'i') {
       var days = await lrGet(LR_PARENT + '/checkins/' + tag + '.json?shallow=true');
       if (days) {
         var latest = Object.keys(days).sort().pop();
         if (latest) {
           var recs = await lrGet(LR_PARENT + '/checkins/' + tag + '/' + latest + '.json');
-          if (recs) Object.keys(recs).forEach(function (k) { var t = Number(k); if (t && (!chkTs || t > chkTs)) chkTs = t; });
+          if (recs) Object.keys(recs).forEach(function (k) { var t = Number(k); if (!t) return; if (!chkTs || t > chkTs) chkTs = t; var rb = recs[k]; if (rb && typeof rb.batt === 'number' && (!chkBatt || t > chkBatt.ts)) chkBatt = { pct: rb.batt, chg: rb.chg === true, ts: t }; });
         }
       }
     }
-    rows.push({ tag: tag, app: app, label: label, sentAt: sentAt, req: req, posActive: posActive, rideTs: rideTs, posTs: posTs, presPage: presPage, presPoll: presPoll, presAlerts: presAlerts, chkTs: chkTs });
+    var batt = presBatt ? { pct: presBatt.pct, chg: presBatt.chg === true, ts: presBatt.ts } : null;
+    if (chkBatt && (!batt || chkBatt.ts > batt.ts)) batt = chkBatt;
+    rows.push({ tag: tag, app: app, label: label, sentAt: sentAt, req: req, posActive: posActive, rideTs: rideTs, posTs: posTs, presPage: presPage, presPoll: presPoll, presAlerts: presAlerts, chkTs: chkTs, battPct: batt ? batt.pct : null, battChg: batt ? batt.chg : false });
   }
   lrState = {};
   rows.forEach(function (r) { lrState[r.tag] = r; });
@@ -696,7 +701,8 @@ function lrRender(rows) {
   function rowHtml(r) {
     var name = '<div><span class="lrtag">[' + lrEsc(r.tag) + ']</span>' + (r.label ? ' ' + lrEsc(r.label) : '') + '</div>';
     var chip = r.presAlerts === false ? '<span class="lrchip">alerts off — testing</span>' : '';
-    var pres = '<div class="lrpres">' + lrPresence(r) + chip + '</div>';
+    var battHtml = (r.battPct !== null && r.battPct !== undefined) ? ' <span class="batt">&middot; 🔋 ' + r.battPct + '%' + (r.battChg ? ' ⚡' : '') + '</span>' : '';
+    var pres = '<div class="lrpres">' + lrPresence(r) + chip + battHtml + '</div>';
     var logs = '<div class="lrlogs">last sent ' + lrDateTime(r.sentAt);
     var action = '';
     var req = (r.req && typeof r.req.requestedAt === 'number') ? r.req : null;
