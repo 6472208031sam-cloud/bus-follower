@@ -43,6 +43,7 @@
   .lrrow .lrmeta { opacity: .85; font-size: .9rem; }
   .lrrow .lrpend { color: #d97706; font-weight: 700; font-size: .9rem; }
   .lrgroup { font-size: 1.05rem; margin: 14px 0 2px; color: #0b6e4f; }
+  .lrrow .lrpres { font-weight: 600; white-space: nowrap; }
   .lrrow .lrwho { flex: 1 1 150px; min-width: 0; }
   .lrrow .lrbtns { display: flex; gap: 8px; margin-left: auto; }
   .lrbtn { font-size: .95rem; font-weight: 600; border-radius: 8px; padding: 8px 16px; cursor: pointer; border: 1.5px solid #0b6e4f; background: #0b6e4f; color: #fff; }
@@ -53,7 +54,7 @@
 </style>
 </head>
 <body>
-<h1>ntfy Alert Test <span style="font-size:0.6em;opacity:0.7;font-weight:normal;">v2.26</span></h1>
+<h1>ntfy Alert Test <span style="font-size:0.6em;opacity:0.7;font-weight:normal;">v2.27</span></h1>
 
 <h2>Watching now</h2>
 <div class="row" style="gap:10px;">
@@ -585,7 +586,7 @@ try { watchSeed('stc'); } catch (e) {}
 try { watchSubscribe('bus'); } catch (e) {}
 try { watchSubscribe('stc'); } catch (e) {}
 
-/* ===== Log requests (v2.26): per-phone rows discovered from the logs
+/* ===== Log requests (v2.27): per-phone rows discovered from the logs
    index + position records. Request writes <parent>/logRequests/<tag>;
    fulfilment is judged by the slot (sentAt > requestedAt), so a row
    stays truthful even if the phone's delete fails. ===== */
@@ -607,6 +608,7 @@ async function lrRefresh() {
   var logsIdx = await lrGet(LR_PARENT + '/logs.json?shallow=true');
   var busIdx = await lrGet(LR_PARENT + '/bus.json?shallow=true');
   var stcIdx = await lrGet(LR_PARENT + '/stc.json?shallow=true');
+  var presIdx = await lrGet(LR_PARENT + '/presence.json');
   var tags = {};
   Object.keys(logsIdx || {}).forEach(function (t) { tags[t] = true; });
   Object.keys(busIdx || {}).forEach(function (t) { tags[t] = true; });
@@ -628,11 +630,58 @@ async function lrRefresh() {
       if (pos && pos.label) label = pos.label;
     }
     var req = await lrGet(LR_PARENT + '/logRequests/' + tag + '.json');
-    rows.push({ tag: tag, app: app, label: label, sentAt: sentAt, req: req });
+    // v2.27 Phone Presence inputs: own-node + dual-node position
+    // ts/active, the two presence child stamps, newest iOS check-in.
+    var ownTs = await lrGet(LR_PARENT + '/' + app + '/' + tag + '/ts.json');
+    var ownActive = await lrGet(LR_PARENT + '/' + app + '/' + tag + '/active.json');
+    var otherApp = app === 'stc' ? 'bus' : 'stc';
+    var inOther = otherApp === 'bus' ? !!(busIdx && busIdx[tag]) : !!(stcIdx && stcIdx[tag]);
+    var othTs = null, othActive = null;
+    if (inOther) {
+      othTs = await lrGet(LR_PARENT + '/' + otherApp + '/' + tag + '/ts.json');
+      othActive = await lrGet(LR_PARENT + '/' + otherApp + '/' + tag + '/active.json');
+    }
+    var posActive = ownActive === true || othActive === true;
+    var rideTs = othActive === true ? othTs : ownTs;
+    var posTs = Math.max(ownTs || 0, othTs || 0) || null;
+    var pres = (presIdx && presIdx[tag]) || null;
+    var presPage = pres && typeof pres.page === 'number' ? pres.page : null;
+    var presPoll = pres && typeof pres.poll === 'number' ? pres.poll : null;
+    var chkTs = null;
+    if (tag.charAt(0) === 'i') {
+      var days = await lrGet(LR_PARENT + '/checkins/' + tag + '.json?shallow=true');
+      if (days) {
+        var latest = Object.keys(days).sort().pop();
+        if (latest) {
+          var recs = await lrGet(LR_PARENT + '/checkins/' + tag + '/' + latest + '.json');
+          if (recs) Object.keys(recs).forEach(function (k) { var t = Number(k); if (t && (!chkTs || t > chkTs)) chkTs = t; });
+        }
+      }
+    }
+    rows.push({ tag: tag, app: app, label: label, sentAt: sentAt, req: req, posActive: posActive, rideTs: rideTs, posTs: posTs, presPage: presPage, presPoll: presPoll, chkTs: chkTs });
   }
   lrState = {};
   rows.forEach(function (r) { lrState[r.tag] = r; });
   lrRender(rows);
+}
+function lrAgo(ms) {
+  var s = Math.max(0, Math.round((Date.now() - ms) / 1000));
+  if (s < 60) return s + 's ago';
+  var m = Math.round(s / 60);
+  if (m < 180) return m + ' min ago';
+  return lrDateTime(ms);
+}
+function lrPresence(r) {
+  var now = Date.now();
+  if (r.posActive) {
+    var fixTs = r.rideTs || r.posTs;
+    return '🟢 On a ride' + (fixTs ? ' · last fix ' + lrAgo(fixTs) : '');
+  }
+  if (r.presPage && now - r.presPage < 90000) return '🟢 Open now';
+  var last = Math.max(r.presPage || 0, r.presPoll || 0, r.posTs || 0, r.chkTs || 0, r.sentAt || 0);
+  var win = r.tag.charAt(0) === 'i' ? 3600000 : 1200000;
+  if (last && now - last < win) return '🟡 Wakeable · heard ' + lrAgo(last);
+  return '🔴 Dark · ' + (last ? 'last heard ' + lrDateTime(last) : 'last heard never');
 }
 function lrRender(rows) {
   var box = document.getElementById('lrRows');
@@ -640,7 +689,7 @@ function lrRender(rows) {
   var now = Date.now();
   function rowHtml(r) {
     var name = '<span class="lrwho"><span class="lrtag">[' + lrEsc(r.tag) + ']</span>' + (r.label ? ' ' + lrEsc(r.label) : '') + '</span>';
-    var meta = 'last sent ' + lrDateTime(r.sentAt);
+    var meta = '<span class="lrpres">' + lrPresence(r) + '</span> &middot; last sent ' + lrDateTime(r.sentAt);
     var action = '';
     var req = (r.req && typeof r.req.requestedAt === 'number') ? r.req : null;
     var fulfilled = req && r.sentAt && r.sentAt > req.requestedAt;
