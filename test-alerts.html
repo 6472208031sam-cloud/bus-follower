@@ -54,10 +54,13 @@
   .lrbtn.cancel { background: transparent; color: #b00020; border-color: #b00020; }
   .lrbtn:disabled { background: transparent; color: #999; border-color: rgba(127,127,127,.4); cursor: default; }
   #lrStatus { font-size: .9rem; margin-top: 8px; min-height: 1.2em; }
+  .lrloc { font-size: .85rem; opacity: .85; margin-top: 1px; }
+  .lrstate { font-size: .85rem; margin-top: 1px; }
+  .lractions { display: flex; flex-direction: column; gap: 6px; align-items: stretch; }
 </style>
 </head>
 <body>
-<h1>Test Alerts & Phone Presence <span style="font-size:0.6em;opacity:0.7;font-weight:normal;">v2.35</span></h1>
+<h1>Test Alerts & Phone Presence <span style="font-size:0.6em;opacity:0.7;font-weight:normal;">v2.36</span></h1>
 <p style="font-size:0.85rem;opacity:0.8;margin-top:2px;">Watching now · Broadcast · Log requests · Connectivity test · Stop sends</p>
 
 <h2>Watching now</h2>
@@ -591,10 +594,17 @@ try { watchSeed('stc'); } catch (e) {}
 try { watchSubscribe('bus'); } catch (e) {}
 try { watchSubscribe('stc'); } catch (e) {}
 
-/* ===== Log requests (v2.35): per-phone rows discovered from the logs
+/* ===== Log requests (v2.36): per-phone rows discovered from the logs
    index + position records. Request writes <parent>/logRequests/<tag>;
    fulfilment is judged by the slot (sentAt > requestedAt), so a row
-   stays truthful even if the phone's delete fails. ===== */
+   stays truthful even if the phone's delete fails.
+   v2.36 adds Remote Start Ride + Remote GPS Locate beside it:
+   startRequests/<tag> and locateRequests/<tag> mirror the log-request
+   writes (60-minute life); the phone settles a start by writing its
+   ack (status/at/dark) back on the record and LEAVING it (R1) - the
+   panel clears a settled record once it has rendered the ack. Locate
+   answers land at locate/<tag> ({lat, lng, acc, ts, reqAt}), a
+   panel-only record, never published to the followers. ===== */
 var LR_FB_BASE = 'https://bus-live-tracker-db0e1-default-rtdb.firebaseio.com';
 var LR_PARENT = 'pos-4688de3309369eb335b245d1';
 function lrEsc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
@@ -614,12 +624,14 @@ async function lrRefresh() {
   var busIdx = await lrGet(LR_PARENT + '/bus.json?shallow=true');
   var stcIdx = await lrGet(LR_PARENT + '/stc.json?shallow=true');
   var presIdx = await lrGet(LR_PARENT + '/presence.json');
+  var locIdx = await lrGet(LR_PARENT + '/locate.json');
   var tags = {};
   Object.keys(logsIdx || {}).forEach(function (t) { tags[t] = true; });
   Object.keys(busIdx || {}).forEach(function (t) { tags[t] = true; });
   Object.keys(stcIdx || {}).forEach(function (t) { tags[t] = true; });
   var list = Object.keys(tags).sort();
   var rows = [];
+  var clearStart = [], clearLocReq = [];
   for (var i = 0; i < list.length; i++) {
     var tag = list[i];
     var inLogs = !!(logsIdx && logsIdx[tag]);
@@ -632,9 +644,14 @@ async function lrRefresh() {
     if (!app) app = (busIdx && busIdx[tag]) ? 'bus' : ((stcIdx && stcIdx[tag]) ? 'stc' : 'bus');
     if (!label) {
       var pos = await lrGet(LR_PARENT + '/' + app + '/' + tag + '.json');
+      if (pos) { posFull = pos; posFullApp = app; }
       if (pos && pos.label) label = pos.label;
     }
     var req = await lrGet(LR_PARENT + '/logRequests/' + tag + '.json');
+    var sReq = await lrGet(LR_PARENT + '/startRequests/' + tag + '.json');
+    var lReq = await lrGet(LR_PARENT + '/locateRequests/' + tag + '.json');
+    var locAns = (locIdx && locIdx[tag] && typeof locIdx[tag] === 'object') ? locIdx[tag] : null;
+    var posFull = null, posFullApp = null;
     // v2.27 Phone Presence inputs: own-node + dual-node position
     // ts/active, the two presence child stamps, newest iOS check-in.
     var ownTs = await lrGet(LR_PARENT + '/' + app + '/' + tag + '/ts.json');
@@ -665,8 +682,13 @@ async function lrRefresh() {
       if (liveApp !== app) {
         app = liveApp;
         var livePos = await lrGet(LR_PARENT + '/' + app + '/' + tag + '.json');
+        if (livePos) { posFull = livePos; posFullApp = app; }
         if (livePos && livePos.label) label = livePos.label;
       }
+    }
+    if (posFullApp !== app) {
+      var finPos = await lrGet(LR_PARENT + '/' + app + '/' + tag + '.json');
+      if (finPos) { posFull = finPos; posFullApp = app; }
     }
     var pres = (presIdx && presIdx[tag]) || null;
     var presPage = pres && typeof pres.page === 'number' ? pres.page : null;
@@ -676,13 +698,14 @@ async function lrRefresh() {
     var presLabels = pres && pres.labels && typeof pres.labels === 'object' ? pres.labels : null;
     var chkTs = null;
     var chkBatt = null;
+    var chkFix = null;
     if (tag.charAt(0) === 'i') {
       var days = await lrGet(LR_PARENT + '/checkins/' + tag + '.json?shallow=true');
       if (days) {
         var latest = Object.keys(days).sort().pop();
         if (latest) {
           var recs = await lrGet(LR_PARENT + '/checkins/' + tag + '/' + latest + '.json');
-          if (recs) Object.keys(recs).forEach(function (k) { var t = Number(k); if (!t) return; if (!chkTs || t > chkTs) chkTs = t; var rb = recs[k]; if (rb && typeof rb.batt === 'number' && (!chkBatt || t > chkBatt.ts)) chkBatt = { pct: rb.batt, chg: rb.chg === true, ts: t }; });
+          if (recs) Object.keys(recs).forEach(function (k) { var t = Number(k); if (!t) return; if (!chkTs || t > chkTs) chkTs = t; var rb = recs[k]; if (rb && typeof rb.batt === 'number' && (!chkBatt || t > chkBatt.ts)) chkBatt = { pct: rb.batt, chg: rb.chg === true, ts: t }; if (rb && typeof rb.lat === 'number' && typeof rb.lng === 'number' && (!chkFix || t > chkFix.ts)) chkFix = { lat: rb.lat, lng: rb.lng, acc: typeof rb.acc === 'number' ? rb.acc : null, ts: t }; });
         }
       }
     }
@@ -693,11 +716,24 @@ async function lrRefresh() {
     if (pLbl) label = pLbl;
     var batt = presBatt ? { pct: presBatt.pct, chg: presBatt.chg === true, ts: presBatt.ts } : null;
     if (chkBatt && (!batt || chkBatt.ts > batt.ts)) batt = chkBatt;
-    rows.push({ tag: tag, app: app, label: label, sentAt: sentAt, req: req, posActive: posActive, rideTs: rideTs, posTs: posTs, presPage: presPage, presPoll: presPoll, presAlerts: presAlerts, chkTs: chkTs, battPct: batt ? batt.pct : null, battChg: batt ? batt.chg : false });
+    // v2.36: last known fix = freshest of the position record, the
+    // newest iOS check-in, and the latest Locate answer.
+    var fix = null;
+    function considerFix(lat, lng, acc, ts) { if (typeof lat === 'number' && typeof lng === 'number' && typeof ts === 'number' && (!fix || ts > fix.ts)) fix = { lat: lat, lng: lng, acc: typeof acc === 'number' ? acc : null, ts: ts }; }
+    if (posFull) considerFix(posFull.lat, posFull.lng, posFull.acc, posFull.ts);
+    if (chkFix) considerFix(chkFix.lat, chkFix.lng, chkFix.acc, chkFix.ts);
+    if (locAns) considerFix(locAns.lat, locAns.lng, locAns.acc, locAns.ts);
+    // R1: settled start acks and answered locate requests are cleared
+    // by the panel AFTER this render has shown them.
+    if (sReq && typeof sReq.status === 'string') clearStart.push(tag);
+    if (lReq && typeof lReq.requestedAt === 'number' && locAns && locAns.reqAt === lReq.requestedAt) clearLocReq.push(tag);
+    rows.push({ tag: tag, app: app, label: label, sentAt: sentAt, req: req, sReq: sReq, lReq: lReq, locAns: locAns, fix: fix, posActive: posActive, rideTs: rideTs, posTs: posTs, presPage: presPage, presPoll: presPoll, presAlerts: presAlerts, chkTs: chkTs, battPct: batt ? batt.pct : null, battChg: batt ? batt.chg : false });
   }
   lrState = {};
   rows.forEach(function (r) { lrState[r.tag] = r; });
   lrRender(rows);
+  clearStart.forEach(function (t) { fetch(LR_FB_BASE + '/' + LR_PARENT + '/startRequests/' + t + '.json', { method: 'DELETE' }).catch(function () {}); });
+  clearLocReq.forEach(function (t) { fetch(LR_FB_BASE + '/' + LR_PARENT + '/locateRequests/' + t + '.json', { method: 'DELETE' }).catch(function () {}); });
 }
 function lrAgo(ms) {
   var s = Math.max(0, Math.round((Date.now() - ms) / 1000));
@@ -751,24 +787,68 @@ function lrRender(rows) {
     var chip = r.presAlerts === false ? '<span class="lrchip">alerts off — testing</span>' : '';
     var battHtml = (r.battPct !== null && r.battPct !== undefined) ? ' <span class="batt">&middot; 🔋 ' + r.battPct + '%' + (r.battChg ? ' ⚡' : '') + '</span>' : '';
     var pres = '<div class="lrpres">' + lrPresence(r) + chip + battHtml + '</div>';
+    // v2.36 location line: last known fix + map link.
+    var loc = '<div class="lrloc">';
+    if (r.fix) {
+      loc += '📍 <a href="https://www.google.com/maps?q=' + r.fix.lat + ',' + r.fix.lng + '" target="_blank" rel="noopener">last fix</a> ' + lrDateTime(r.fix.ts) + ' (' + lrAgo(r.fix.ts) + ')' + (r.fix.acc !== null ? ' · ±' + Math.round(r.fix.acc) + ' m' : '');
+    } else {
+      loc += '📍 no fix yet';
+    }
+    loc += '</div>';
     var logs = '<div class="lrlogs">last sent ' + lrDateTime(r.sentAt);
-    var action = '';
+    var btns = [];
     var req = (r.req && typeof r.req.requestedAt === 'number') ? r.req : null;
     var fulfilled = req && r.sentAt && r.sentAt > req.requestedAt;
     if (req && !fulfilled) {
       if (now - req.requestedAt > 86400000) {
         logs += ' <span class="lrpend">request expired</span>';
-        action = '<button type="button" class="lrbtn" data-lr="req" data-tag="' + lrEsc(r.tag) + '">Request</button>';
+        btns.push('<button type="button" class="lrbtn" data-lr="req" data-tag="' + lrEsc(r.tag) + '">Request</button>');
       } else {
         logs += ' <span class="lrpend">&middot; requested ' + lrDateTime(req.requestedAt) + ' — waiting</span>';
-        action = '<button type="button" class="lrbtn cancel" data-lr="cancel" data-tag="' + lrEsc(r.tag) + '">Cancel</button>';
+        btns.push('<button type="button" class="lrbtn cancel" data-lr="cancel" data-tag="' + lrEsc(r.tag) + '">Cancel</button>');
       }
     } else {
-      action = '<button type="button" class="lrbtn" data-lr="req" data-tag="' + lrEsc(r.tag) + '">Request</button>';
+      btns.push('<button type="button" class="lrbtn" data-lr="req" data-tag="' + lrEsc(r.tag) + '">Request</button>');
     }
     if (r.sentAt) logs += ' &middot; <a href="#" data-lr="dl" data-tag="' + lrEsc(r.tag) + '">Download</a>';
     logs += '</div>';
-    return '<div class="lrrow"><div class="lrtext">' + name + pres + logs + '</div>' + action + '</div>';
+    // v2.36 Remote Start state + button (ack per R1: the phone leaves
+    // the settled record; this panel clears it after rendering).
+    var startLine = '';
+    var sReq = (r.sReq && typeof r.sReq.requestedAt === 'number') ? r.sReq : null;
+    if (sReq && typeof sReq.status === 'string') {
+      var ackTxt = sReq.status === 'started' ? (sReq.dark ? 'started from panel — running dark (alerts off)' : 'started from panel') : (sReq.status === 'already-on-a-ride' ? 'already on a ride' : sReq.status);
+      startLine = '<div class="lrstate">🟢 ' + lrEsc(ackTxt) + (typeof sReq.at === 'number' ? ' · ' + lrDateTime(sReq.at) : '') + '</div>';
+      btns.push('<button type="button" class="lrbtn" data-lr="start" data-tag="' + lrEsc(r.tag) + '">Start ride</button>');
+    } else if (sReq) {
+      if (now - sReq.requestedAt > 3600000) {
+        startLine = '<div class="lrstate"><span class="lrpend">start request expired</span></div>';
+        btns.push('<button type="button" class="lrbtn" data-lr="start" data-tag="' + lrEsc(r.tag) + '">Start ride</button>');
+      } else {
+        startLine = '<div class="lrstate"><span class="lrpend">start requested ' + lrDateTime(sReq.requestedAt) + ' — waiting for the phone</span></div>';
+        btns.push('<button type="button" class="lrbtn cancel" data-lr="cancelstart" data-tag="' + lrEsc(r.tag) + '">Cancel start</button>');
+      }
+    } else {
+      btns.push('<button type="button" class="lrbtn" data-lr="start" data-tag="' + lrEsc(r.tag) + '">Start ride</button>');
+    }
+    // v2.36 Locate state + button.
+    var locLine = '';
+    var lReq = (r.lReq && typeof r.lReq.requestedAt === 'number') ? r.lReq : null;
+    var answered = !!(lReq && r.locAns && r.locAns.reqAt === lReq.requestedAt);
+    if (lReq && !answered) {
+      if (now - lReq.requestedAt > 3600000) {
+        locLine = '<div class="lrstate"><span class="lrpend">locate request expired</span></div>';
+        btns.push('<button type="button" class="lrbtn" data-lr="locate" data-tag="' + lrEsc(r.tag) + '">Locate</button>');
+      } else {
+        locLine = '<div class="lrstate"><span class="lrpend">locate requested ' + lrDateTime(lReq.requestedAt) + ' — waiting for the phone</span></div>';
+        btns.push('<button type="button" class="lrbtn cancel" data-lr="cancellocate" data-tag="' + lrEsc(r.tag) + '">Cancel locate</button>');
+      }
+    } else {
+      if (answered) locLine = '<div class="lrstate">📍 located ' + lrDateTime(r.locAns.ts) + '</div>';
+      btns.push('<button type="button" class="lrbtn" data-lr="locate" data-tag="' + lrEsc(r.tag) + '">Locate</button>');
+    }
+    var action = '<div class="lractions">' + btns.join('') + '</div>';
+    return '<div class="lrrow"><div class="lrtext">' + name + pres + loc + logs + startLine + locLine + '</div>' + action + '</div>';
   }
   function groupHtml(title, list) {
     if (!list.length) return '';
@@ -810,13 +890,32 @@ document.getElementById('lrRows').addEventListener('click', async function (e) {
     btn.disabled = false;
     return;
   }
-  if (btn.getAttribute('data-lr') === 'req') {
-    var body = { requestedAt: Date.now(), app: row ? row.app : 'bus' };
-    var r = await fetch(LR_FB_BASE + '/' + LR_PARENT + '/logRequests/' + tag + '.json', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).catch(function () { return null; });
-    status.textContent = r && r.ok ? 'Requested [' + tag + '] at ' + lrDateTime(body.requestedAt) + ' — it sends when the app is open, or after one doorbell ring.' : 'Request failed for [' + tag + '] — check connection and try again.';
-  } else {
-    var d = await fetch(LR_FB_BASE + '/' + LR_PARENT + '/logRequests/' + tag + '.json', { method: 'DELETE' }).catch(function () { return null; });
-    status.textContent = d && d.ok ? 'Request for [' + tag + '] cancelled.' : 'Cancel failed for [' + tag + '] — check connection and try again.';
+  var kind = btn.getAttribute('data-lr');
+  var app = row ? row.app : 'bus';
+  async function putReq(node) {
+    var body = { requestedAt: Date.now(), app: app };
+    var r = await fetch(LR_FB_BASE + '/' + LR_PARENT + '/' + node + '/' + tag + '.json', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).catch(function () { return null; });
+    return r && r.ok ? body : null;
+  }
+  async function delReq(node) {
+    var d = await fetch(LR_FB_BASE + '/' + LR_PARENT + '/' + node + '/' + tag + '.json', { method: 'DELETE' }).catch(function () { return null; });
+    return !!(d && d.ok);
+  }
+  if (kind === 'req') {
+    var b1 = await putReq('logRequests');
+    status.textContent = b1 ? 'Requested [' + tag + '] at ' + lrDateTime(b1.requestedAt) + ' — it sends when the app is open, or after one doorbell ring.' : 'Request failed for [' + tag + '] — check connection and try again.';
+  } else if (kind === 'cancel') {
+    status.textContent = (await delReq('logRequests')) ? 'Request for [' + tag + '] cancelled.' : 'Cancel failed for [' + tag + '] — check connection and try again.';
+  } else if (kind === 'start') {
+    var b2 = await putReq('startRequests');
+    status.textContent = b2 ? 'Start requested for [' + tag + '] at ' + lrDateTime(b2.requestedAt) + ' — the phone starts on its next poll or wake (request lives 60 min).' : 'Start request failed for [' + tag + '] — check connection and try again.';
+  } else if (kind === 'cancelstart') {
+    status.textContent = (await delReq('startRequests')) ? 'Start request for [' + tag + '] cancelled.' : 'Cancel failed for [' + tag + '] — check connection and try again.';
+  } else if (kind === 'locate') {
+    var b3 = await putReq('locateRequests');
+    status.textContent = b3 ? 'Locate requested for [' + tag + '] at ' + lrDateTime(b3.requestedAt) + ' — the phone answers silently on its next poll or wake (request lives 60 min).' : 'Locate request failed for [' + tag + '] — check connection and try again.';
+  } else if (kind === 'cancellocate') {
+    status.textContent = (await delReq('locateRequests')) ? 'Locate request for [' + tag + '] cancelled.' : 'Cancel failed for [' + tag + '] — check connection and try again.';
   }
   lrRefresh();
 });
